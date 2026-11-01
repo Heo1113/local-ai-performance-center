@@ -6,6 +6,7 @@
   </PropertyGroup>
   <ItemGroup>
     <PackageReference Include="CommunityToolkit.Mvvm" />
+    <PackageReference Include="ScottPlot" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\LocalAiPerf.Recording\LocalAiPerf.Recording.csproj" />

@@ -12,6 +12,7 @@
 | 자동 테스트 (`dotnet test`, xUnit v3) | 82개 전부 통과 (단위·통합·회귀·예외 상황) |
 | Windows x64 단일 EXE 교차 게시 (`dotnet publish -r win-x64 --self-contained -p:PublishSingleFile=true`) | 성공, 약 77 MB. Windows에서 실행해 보지는 못함 |
 | XAML 바인딩 이름과 뷰모델 속성 정적 대조 | 불일치 없음 |
+| 그래프 렌더링: 앱과 같은 렌더러(`ChartRenderer`)로 모든 차트 모델을 PNG로 그려 육안 확인 (실시간 9종, 기록 1종, 비교 1종) | 확인. 반복 렌더링 시 범례 패널이 쌓이던 결함을 발견해 수정하고 테스트로 고정 |
 | CLI 종단 간: 실제 Linux CPU/RAM + 가상 Strata로 기록 2회, 비교, CSV/JSON 내보내기, 백업, 무결성 검사 (`scripts/smoke-cli.ps1`) | 통과 |
 | NVML 없음 처리 (GPU 항목 N/A와 사유 표시) | 확인 |
 
