@@ -118,7 +118,8 @@ public class ViewModelTests
 
         // History
         main.NavigateCommand.Execute(main.History);
-        Assert.True(await Until(ui, () => main.History.Sessions.Count == 2 && main.History.Stats.Count > 0));
+        // No UI SynchronizationContext in tests: the load continues on a pool thread, so wait for its last step (the chart).
+        Assert.True(await Until(ui, () => main.History.Sessions.Count == 2 && main.History.Stats.Count > 0 && main.History.Chart is not null && !main.History.IsBusy));
         Assert.Contains(main.History.Sessions, s => s.Name == "VM 테스트 세션");
         Assert.NotNull(main.History.Chart);
         await main.History.ExportCsvCommand.ExecuteAsync(null);
