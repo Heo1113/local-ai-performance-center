@@ -61,6 +61,7 @@ public sealed record RuntimeConditions
     /// <summary>
     /// True when a field that was known before now has a different known value.
     /// A value that was unknown and became known (for example the engine version after authentication) is not a change.
+    /// Settings count only when both sides reported settings.
     /// </summary>
     public static bool IsMaterialChange(RuntimeConditions? previous, RuntimeConditions? current)
     {
@@ -76,11 +77,18 @@ public sealed record RuntimeConditions
             || Changed(previous.ModelId, current.ModelId)
             || Changed(previous.ModelFileName, current.ModelFileName)
             || Changed(previous.ContextTokens, current.ContextTokens)
-            || Changed(previous.Slots, current.Slots);
+            || Changed(previous.Slots, current.Slots)
+            || (previous.Settings.Count > 0 && current.Settings.Count > 0 && !SameSettings(previous.Settings, current.Settings));
     }
 
-    /// <summary>Human readable list of differing fields, for comparison warnings.</summary>
-    public static IReadOnlyList<string> Describe(RuntimeConditions? a, RuntimeConditions? b)
+    private static bool SameSettings(IReadOnlyList<RuntimeSetting> a, IReadOnlyList<RuntimeSetting> b)
+        => a.OrderBy(s => s.Key, StringComparer.Ordinal).SequenceEqual(b.OrderBy(s => s.Key, StringComparer.Ordinal));
+
+    /// <summary>
+    /// Human readable list of differing fields, for comparison warnings. With <paramref name="includeUnknown"/> false,
+    /// a field that is unknown on one side is not reported as a difference.
+    /// </summary>
+    public static IReadOnlyList<string> Describe(RuntimeConditions? a, RuntimeConditions? b, bool includeUnknown = false)
     {
         var differences = new List<string>();
         if (a is null || b is null)
@@ -90,6 +98,11 @@ public sealed record RuntimeConditions
 
         void Check(string label, object? x, object? y)
         {
+            if (!includeUnknown && (x is null || y is null))
+            {
+                return;
+            }
+
             if (!Equals(x, y))
             {
                 differences.Add($"{label}: {x ?? "알 수 없음"} → {y ?? "알 수 없음"}");
@@ -102,6 +115,11 @@ public sealed record RuntimeConditions
         Check("모델 파일", a.ModelFileName, b.ModelFileName);
         Check("컨텍스트", a.ContextTokens, b.ContextTokens);
         Check("병렬 슬롯", a.Slots, b.Slots);
+        if (!includeUnknown && (a.Settings.Count == 0 || b.Settings.Count == 0))
+        {
+            return differences;
+        }
+
         var aSettings = a.Settings.ToDictionary(s => s.Key, s => s.Value, StringComparer.Ordinal);
         var bSettings = b.Settings.ToDictionary(s => s.Key, s => s.Value, StringComparer.Ordinal);
         foreach (var key in aSettings.Keys.Union(bSettings.Keys).Order(StringComparer.Ordinal))

@@ -330,14 +330,10 @@ public sealed class SessionRecorder : IAsyncDisposable
                 if (conditions.Fingerprint != _lastFingerprint)
                 {
                     conditionsToWrite = conditions;
-                    if (_lastConditions is not null)
+                    if (_lastConditions is not null && RuntimeConditions.IsMaterialChange(_lastConditions, conditions))
                     {
-                        var described = RuntimeConditions.Describe(_lastConditions, conditions);
-                        if (described.Count > 0)
-                        {
-                            events.Add(new EventRecord(session.Id, rt.Timestamp, EventSeverity.Info, EventCategories.RuntimeChange,
-                                "런타임 조건 변경: " + string.Join(", ", described)));
-                        }
+                        events.Add(new EventRecord(session.Id, rt.Timestamp, EventSeverity.Info, EventCategories.RuntimeChange,
+                            "런타임 조건 변경: " + string.Join(", ", RuntimeConditions.Describe(_lastConditions, conditions))));
                     }
 
                     _lastFingerprint = conditions.Fingerprint;

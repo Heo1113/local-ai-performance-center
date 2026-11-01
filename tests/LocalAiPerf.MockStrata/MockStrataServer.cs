@@ -138,7 +138,7 @@ public sealed class MockStrataServer : IAsyncDisposable
                 _recent.RemoveAt(_recent.Count - 1);
             }
 
-            _outputCounter += outputTokens;
+            // Like Strata's counter (completed + in-flight tokens), finishing a request does not add tokens again.
             AddEvent(id, "finished", finish == "error" ? "error" : "stop");
         }
     }

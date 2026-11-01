@@ -6,6 +6,7 @@
   </PropertyGroup>
   <ItemGroup>
     <ProjectReference Include="..\LocalAiPerf.Core\LocalAiPerf.Core.csproj" />
+    <ProjectReference Include="..\LocalAiPerf.Storage\LocalAiPerf.Storage.csproj" />
   </ItemGroup>
   <ItemGroup>
     <InternalsVisibleTo Include="LocalAiPerf.Tests" />
