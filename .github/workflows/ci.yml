@@ -1,0 +1,92 @@
+name: CI
+
+on:
+  push:
+    branches:
+      - main
+      - "claude/**"
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  DOTNET_NOLOGO: "1"
+  DOTNET_CLI_TELEMETRY_OPTOUT: "1"
+  DOTNET_SKIP_FIRST_TIME_EXPERIENCE: "1"
+
+jobs:
+  linux:
+    name: Linux - build (incl. WPF compile) and tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
+        with:
+          dotnet-version: 10.0.x
+
+      - name: Build
+        run: dotnet build LocalAiPerformanceCenter.slnx -c Release
+
+      - name: Test
+        run: dotnet test --project tests/LocalAiPerf.Tests -c Release --no-build
+
+  windows:
+    name: Windows x64 - build, tests, smoke tests, portable package
+    runs-on: windows-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
+        with:
+          dotnet-version: 10.0.x
+
+      - name: Build
+        run: dotnet build LocalAiPerformanceCenter.slnx -c Release
+
+      - name: Test
+        run: dotnet test --project tests/LocalAiPerf.Tests -c Release --no-build
+
+      - name: CLI recording smoke test (Windows CPU/RAM API, NVML if present, mock Strata)
+        shell: pwsh
+        run: ./scripts/smoke-cli.ps1 -Configuration Release
+
+      - name: Publish portable package
+        shell: pwsh
+        run: ./scripts/publish.ps1 -OutputDir dist
+
+      - name: GUI smoke test (published EXE)
+        shell: pwsh
+        run: ./scripts/smoke-gui.ps1 -Exe dist/LocalAiPerformanceCenter-win-x64/LocalAiPerformanceCenter.exe -ReportDir dist/smoke
+
+      - name: Upload portable package
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: LocalAiPerformanceCenter-win-x64
+          path: |
+            dist/*.zip
+            dist/*.sha256
+          if-no-files-found: warn
+          retention-days: 30
+
+      - name: Upload smoke test evidence
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: smoke-test-evidence
+          path: dist/smoke
+          if-no-files-found: warn
+          retention-days: 30
