@@ -30,14 +30,24 @@
 
 ## 2. Windows CI (GitHub Actions `windows-latest`)
 
-**아직 실행하지 못했습니다.** 이 세션의 GitHub 권한으로는 브랜치를 push할 수 없어(403) 워크플로가 시작되지 않았습니다.
-권한이 해결되면 `.github/workflows/ci.yml`이 Windows에서 빌드, 테스트, CLI 실측 스모크(Windows CPU/RAM API), 포터블 패키지 생성,
-게시된 EXE의 GUI 스모크 테스트(실제 센서·가상 센서 각 1회, 화면별 스크린샷과 JSON 보고서)를 실행하고 아티팩트
-(`LocalAiPerformanceCenter-win-x64`, `smoke-test-evidence`)를 올립니다.
+실행: [CI #3](https://github.com/Heo1113/local-ai-performance-center/actions/runs/41314333713), 커밋 `f702c08`, 2026-11-01. 러너: AMD EPYC 가상 머신, NVIDIA GPU 없음.
+
+| 단계 | 결과 |
+|---|---|
+| 빌드 (Windows, Release) | 성공 |
+| 자동 테스트 | 86개 전부 통과 |
+| CLI 실측 스모크: Windows CPU/RAM API + 가상 Strata, 기록 2회·비교·내보내기·백업·무결성 검사 | 통과 (시스템 샘플 16, CPU 16, RAM 16, Strata 연결 샘플 15, GPU 0 = NVML 없음) |
+| 포터블 패키지 (자체 포함 단일 EXE) | 생성, zip 68.1 MB, SHA-256 파일 동봉. 아티팩트 `LocalAiPerformanceCenter-win-x64` |
+| GUI 스모크 (게시된 EXE, 실제 센서) | 통과: 프레임 19, 6개 화면 이동, 수동 기록 2회, 기록 통계, 비교, 설정, 예외 0, 바인딩 오류·경고 0. GPU는 "nvml.dll을 찾을 수 없습니다"로 N/A 표시 |
+| GUI 스모크 (게시된 EXE, 가상 센서) | 통과: 같은 검사, GPU 그래프 경로 포함. 화면별 스크린샷은 아티팩트 `smoke-test-evidence` |
+
+처음 실행(#1)에서 Windows 전용 결함을 발견해 수정했습니다: Windows는 닫힌 포트 연결을 약 2초 재시도해서
+Strata 미실행이 "응답 시간 초과"로 잘못 분류되었습니다. TCP 연결 단계에 별도 제한 시간을 두어 "연결 오류"로 분류하도록 고쳤습니다.
 
 ## 3. 미검증 (실기 필요)
 
-- **Windows에서의 GUI 실행 자체** (Windows CI가 아직 돌지 않음): 화면 배치, Fluent 다크 테마 적용, ScottPlot 그래프 렌더링, 대화 상자.
+- 화면의 시각적 품질(배치, 다크 테마 적용 상태): CI가 스크린샷을 남기지만 이 작업 환경에서는 아티팩트를 열 수 없어 직접 보지 못했습니다. 실행·바인딩·화면 전환은 CI에서 확인했습니다.
+- 파일 대화 상자(백업 경로 선택 등)의 실제 조작: 스모크 테스트는 대화 상자를 띄우지 않는 무인 모드로 실행합니다.
 
 - **RTX 5080 실기에서의 NVML 값**(사용률·온도·전력·VRAM·클럭·PCIe·에너지 카운터·클럭 제한 사유). CI 가상 머신에는 NVIDIA GPU가 없습니다.
 - **실제 Strata 서버와의 연결**. 테스트는 Strata 공개 문서의 응답 형식을 따른 가상 서버로만 했습니다.
