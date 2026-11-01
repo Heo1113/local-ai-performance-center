@@ -195,7 +195,9 @@ public sealed partial class RuntimeViewModel(MonitoringService service, IUiDispa
             return;
         }
 
-        Endpoint = adapter.EndpointDisplay;
+        Endpoint = adapter is Runtimes.Strata.StrataAdapter { ConfiguredEndpoint: string configured }
+            ? $"{adapter.EndpointDisplay} (자동으로 찾음, 설정 주소 {configured})"
+            : adapter.EndpointDisplay;
         var rt = service.LatestRuntime;
         if (rt is null)
         {

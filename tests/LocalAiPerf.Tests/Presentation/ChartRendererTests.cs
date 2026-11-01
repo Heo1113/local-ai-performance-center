@@ -113,4 +113,24 @@ public class ChartRendererTests
         Assert.False(ChartRenderer.Render(plot, null));
         Assert.False(ChartRenderer.Render(plot, new ChartModel { Title = "t", Unit = "%", Series = [new ChartSeries("x", [], [], "#3987e5")] }));
     }
+
+    [Fact]
+    public void Chart_font_is_chosen_by_hangul_glyphs_not_by_the_reported_family_name()
+    {
+        static SkiaSharp.SKTypeface? Hangul() => new[] { "Malgun Gothic", "NanumGothic", "Noto Sans CJK KR" }
+            .Select(name => SkiaSharp.SKTypeface.FromFamilyName(name)).FirstOrDefault(t => t.ContainsGlyph('가'));
+        using (var probe = Hangul())
+        {
+            if (probe is null)
+            {
+                Assert.Skip("이 머신에는 시험용 한글 글꼴이 없습니다.");
+            }
+        }
+
+        // Korean Windows reports Malgun Gothic as "맑은 고딕": a font whose reported name differs must still be used.
+        Assert.Equal("Malgun Gothic", ChartRenderer.ResolveHangulFont(["Malgun Gothic"], _ => Hangul()));
+        Assert.NotNull(ChartRenderer.Font);
+        using var chosen = SkiaSharp.SKTypeface.FromFamilyName(ChartRenderer.Font);
+        Assert.True(chosen.ContainsGlyph('가'), $"'{ChartRenderer.Font}' -> '{chosen.FamilyName}' has no Hangul");
+    }
 }

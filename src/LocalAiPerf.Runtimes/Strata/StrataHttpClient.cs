@@ -23,6 +23,9 @@ public sealed class StrataHttpClient : IDisposable
 {
     public const int MaxBodyBytes = 2 * 1024 * 1024;
 
+    /// <summary>Replaced by the adapter with the name of the environment variable this app reads the key from.</summary>
+    public const string KeyVariablePlaceholder = "{key-variable}";
+
     /// <summary>
     /// Documented read endpoints this app may call. /status is deliberately absent: it can contain the end of the last answer.
     /// </summary>
@@ -128,9 +131,12 @@ public sealed class StrataHttpClient : IDisposable
             {
                 return Fail(path, status, RuntimeErrorCategory.Authentication,
                     _credential is null ? "Strata 서버가 인증을 요구합니다." : "Strata 서버가 API 키를 거부했습니다.",
-                    _credential is null
-                        ? "Strata의 텔레메트리 키 또는 API 키를 환경 변수 STRATA_TELEMETRY_KEY(설정에서 이름 변경 가능)에 넣고 앱을 다시 시작하세요."
-                        : "키가 이 엔진의 키와 다릅니다. Strata 데스크톱 앱은 모델을 로드할 때마다 엔진 키와 포트를 새로 만들어 외부에 공개하지 않으므로 연결할 수 없습니다. 'strata launch'로 실행한 엔진은 'strata launch --show-key'로 키를 확인할 수 있습니다.");
+                    (_credential is null
+                        ? "읽기 전용 텔레메트리 키를 환경 변수 {key-variable}에 넣고 이 앱을 다시 시작하세요. "
+                        : "키가 이 엔진의 텔레메트리 키와 다릅니다. ")
+                    + "Strata 데스크톱 앱: 같은 값을 사용자 환경 변수 STRATA_TELEMETRY_KEY로 설정한 뒤 Strata 앱을 완전히 종료했다가 다시 시작하고 모델을 로드하세요 "
+                    + "(엔진이 시작할 때 이 변수를 텔레메트리 키로 받습니다. Serving API 키와 같은 값은 안 됩니다). "
+                    + "'strata launch'로 실행한 엔진은 같은 변수를 쓰거나 'strata launch --show-key'로 키를 확인할 수 있습니다.");
             }
 
             if (status == 404)
@@ -204,9 +210,9 @@ public sealed class StrataHttpClient : IDisposable
             HttpRequestError.InvalidResponse => Fail(path, null, RuntimeErrorCategory.Compatibility,
                 "HTTP 응답 형식이 아닙니다. 이 포트에서 다른 프로그램이 응답하고 있을 수 있습니다.", null),
             _ when socket is SocketError.ConnectionRefused => Fail(path, null, RuntimeErrorCategory.Connection,
-                "Strata 서버에 연결할 수 없습니다 (연결 거부).", "Strata가 실행 중인지, 주소와 포트(기본 8080)가 맞는지 확인하세요."),
+                "Strata 서버에 연결할 수 없습니다 (연결 거부).", "Strata가 실행 중인지, 주소와 포트가 맞는지 확인하세요 (strata launch 기본 8080, 데스크톱 앱 엔진 18500~18520은 포트 자동 찾기로 연결)."),
             _ when socket is SocketError.TimedOut => Fail(path, null, RuntimeErrorCategory.Connection,
-                "Strata 서버에 연결할 수 없습니다 (연결이 수립되지 않음).", "Strata가 실행 중인지, 주소와 포트(기본 8080)가 맞는지 확인하세요."),
+                "Strata 서버에 연결할 수 없습니다 (연결이 수립되지 않음).", "Strata가 실행 중인지, 주소와 포트가 맞는지 확인하세요 (strata launch 기본 8080, 데스크톱 앱 엔진 18500~18520은 포트 자동 찾기로 연결)."),
             _ => Fail(path, null, RuntimeErrorCategory.Connection,
                 $"Strata 서버와 통신하지 못했습니다 ({ex.HttpRequestError}).", "Strata가 실행 중인지 확인하세요."),
         };

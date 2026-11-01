@@ -41,18 +41,26 @@
 
 ## Strata 데스크톱 앱과의 관계 (실기 확인, 2026-11-01)
 
-사용자 PC(Strata 앱 0.2.x)에서 확인한 내용과 소스 근거입니다.
+사용자 PC(Strata 데스크톱 앱)에서 확인한 내용과 소스 근거입니다.
 
-- 엔진(`serve/server.py`)이 `127.0.0.1:18500`에서 `/health`에 `"service": "strata"`, `"api_key": true`로 응답했습니다.
-- 앱의 Serving API 키로 `/v1/telemetry`를 요청하면 401이 나왔습니다. curl로 직접 요청해도 같았습니다.
-- 소스 근거: `apps/host/server/native-control.mjs`의 `loadEngine()`은 모델을 로드할 때마다 `randomBytes(32)`로 엔진 키를, `freePort()`로 포트를 새로 만듭니다.
-  앱 호스트(47831)는 `/v1/models`와 추론만 공개하고 `/v1/telemetry`는 공개하지 않습니다.
-- 결론: 데스크톱 앱으로 실행한 엔진의 텔레메트리는 공개 인터페이스로 읽을 수 없습니다. 내부 파일(`native-instances/*.json`)에서 키를 읽는 것은 비공개 인터페이스라 하지 않습니다.
-  `strata launch`(Terminal)로 실행한 엔진은 문서화된 경로(`--port`, `--show-key`, `STRATA_TELEMETRY_KEY`)로 연결할 수 있습니다.
+- `apps/host/server/native-control.mjs`의 `loadEngine()`은 모델을 로드할 때마다 엔진 API 키(`randomBytes(32)`)와
+  포트(`freePort()`, 18500부터 최대 20개 위)를 새로 만들고, 엔진을 `127.0.0.1`에만 엽니다. 앱 호스트(47831)는 `/v1/telemetry`를 공개하지 않습니다.
+- 앱의 Serving API 키로 엔진 `/v1/telemetry`를 요청하면 401입니다(사용자 PC에서 확인).
+- 엔진(`serve/server.py`)은 시작할 때 환경 변수 `STRATA_TELEMETRY_KEY`(또는 설정 `telemetry_read_key`)를 읽기 전용 텔레메트리 키로 받습니다.
+  데스크톱 앱은 엔진을 띄울 때 환경 변수를 복사해 넘깁니다(`control-runtime.mjs`의 `sourceServerEnvironment`/`controlEnvironment`,
+  `strata_control/runtime.py`의 `os.environ.copy()`; `STRATA_API_KEY`만 제거).
+- **사용자 PC에서 확인함:** 사용자 환경 변수 `STRATA_TELEMETRY_KEY`를 설정하고 Strata 앱을 다시 시작한 뒤, 이 프로그램이 같은 키로
+  `127.0.0.1:18500`의 `/v1/telemetry`에 연결되었습니다(상태 "연결됨", 모델 ID·컨텍스트 표시). 엔진 버전·`/props`는 텔레메트리 키 권한 밖이라 N/A입니다.
+- 포트는 로드마다 바뀔 수 있어, 포트 자동 찾기가 18500~18520에서 `/health`(인증 없음, `service: "strata"`)로 엔진을 찾습니다.
+  여러 엔진이 있으면 로드된 엔진 중 텔레메트리 키를 받아 주는 엔진을 고릅니다. 탐색 중에는 키를 보내지 않습니다.
+- 내부 파일(`native-instances/*.json` 등)은 읽지 않습니다.
+
+> 정정: 이 문서의 이전 판은 "데스크톱 앱 엔진의 텔레메트리는 공개 인터페이스로 읽을 수 없다"고 적었습니다.
+> `STRATA_TELEMETRY_KEY` 환경 변수 경로를 빠뜨린 잘못이었고, 위와 같이 고쳤습니다.
 
 ## 추론 측정 (사용자가 켜는 기능, POST 1종)
 
-데스크톱 앱 엔진의 텔레메트리를 읽을 수 없으므로, 앱 호스트가 공개하는 추론 API로 성능을 직접 잽니다.
+같은 조건의 반복 측정이 필요할 때, 앱 호스트가 공개하는 추론 API로 성능을 직접 잽니다(텔레메트리와 별개).
 Strata 앱의 "Strata를 앱에 연결" 화면이 안내하는 주소(`http://127.0.0.1:47831/v1`)와 Serving API 키를 씁니다.
 
 | 항목 | 내용 |

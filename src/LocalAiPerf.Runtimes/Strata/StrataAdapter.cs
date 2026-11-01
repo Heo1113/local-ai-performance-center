@@ -10,7 +10,9 @@ public sealed record StrataAdapterOptions(
     string? Credential,
     TimeSpan Timeout,
     TimeSpan MetadataRefresh,
-    string? CredentialVariable = null);
+    string? CredentialVariable = null,
+    bool AutoFindPort = false,
+    IReadOnlyList<int>? ScanPorts = null);
 
 /// <summary>
 /// Observes a running Strata server through its documented read-only HTTP API.
@@ -24,7 +26,19 @@ public sealed class StrataAdapter : IAiRuntimeAdapter
     private static readonly TimeSpan SlowRetry = TimeSpan.FromSeconds(30);
     private static readonly TimeSpan MaxBackoff = TimeSpan.FromSeconds(30);
 
-    private readonly StrataHttpClient _client;
+    /// <summary>
+    /// Ports the Strata desktop app picks for a model's engine: it tries 18500 and the next 20 ports
+    /// (apps/host/server/native-control.mjs, freePort). Only /health (no credential) is asked while searching.
+    /// </summary>
+    public static readonly IReadOnlyList<int> DesktopEnginePorts = Enumerable.Range(18500, 21).ToArray();
+
+    private static readonly TimeSpan DiscoveryInterval = TimeSpan.FromSeconds(5);
+
+    private readonly HttpMessageHandler? _handler;
+    private readonly List<StrataHttpClient> _retiredClients = [];
+    private StrataHttpClient _client;
+    private string _activeBase;
+    private DateTimeOffset _nextDiscovery = DateTimeOffset.MinValue;
     private readonly StrataAdapterOptions _options;
     private readonly TimeProvider _time;
     private readonly IAppLogger _log;
@@ -57,12 +71,17 @@ public sealed class StrataAdapter : IAiRuntimeAdapter
         _options = options with { BaseUrl = normalized };
         _time = time ?? TimeProvider.System;
         _log = log ?? NullLogger.Instance;
+        _handler = handler;
+        _activeBase = normalized;
         _client = new StrataHttpClient(new Uri(normalized), options.Credential, options.Timeout, handler);
     }
 
     public string Kind => RuntimeKindId;
     public string DisplayName => "Strata";
-    public string EndpointDisplay => _options.BaseUrl;
+    public string EndpointDisplay => _activeBase;
+
+    /// <summary>The configured address, when automatic port search moved the connection to another port.</summary>
+    public string? ConfiguredEndpoint => _activeBase == _options.BaseUrl ? null : _options.BaseUrl;
     public bool HasCredential => _client.HasCredential;
 
     /// <summary>Creates the adapter from settings. The key is read from the named environment variable and never stored.</summary>
@@ -76,7 +95,7 @@ public sealed class StrataAdapter : IAiRuntimeAdapter
 
         return new StrataAdapter(
             new StrataAdapterOptions(settings.BaseUrl, credential, TimeSpan.FromMilliseconds(settings.TimeoutMs),
-                TimeSpan.FromSeconds(settings.MetadataRefreshSeconds), settings.ApiKeyEnvironmentVariable),
+                TimeSpan.FromSeconds(settings.MetadataRefreshSeconds), settings.ApiKeyEnvironmentVariable, settings.AutoFindPort),
             time, log);
     }
 
@@ -100,6 +119,16 @@ public sealed class StrataAdapter : IAiRuntimeAdapter
         }
 
         var (telemetry, error) = await FetchTelemetryAsync(now, cancellationToken).ConfigureAwait(false);
+        if (telemetry is null && ShouldSearch(error!, now))
+        {
+            _nextDiscovery = now + DiscoveryInterval;
+            if (await FindEngineAsync(cancellationToken).ConfigureAwait(false) is string found)
+            {
+                SwitchTo(found);
+                (telemetry, error) = await FetchTelemetryAsync(_time.GetUtcNow(), cancellationToken).ConfigureAwait(false);
+            }
+        }
+
         now = _time.GetUtcNow();
         if (telemetry is null)
         {
@@ -130,7 +159,73 @@ public sealed class StrataAdapter : IAiRuntimeAdapter
         }
 
         _client.Dispose();
+        foreach (var retired in _retiredClients)
+        {
+            retired.Dispose();
+        }
+
         _disposeCts.Dispose();
+    }
+
+    private bool ShouldSearch(RuntimeError error, DateTimeOffset now)
+        => _options.AutoFindPort
+           && error.Category is RuntimeErrorCategory.Connection or RuntimeErrorCategory.Compatibility
+           && now >= _nextDiscovery
+           && !_disposeCts.IsCancellationRequested
+           && Uri.TryCreate(_activeBase, UriKind.Absolute, out var uri) && uri.Scheme == Uri.UriSchemeHttp && EndpointValidator.IsLoopback(uri);
+
+    /// <summary>
+    /// Looks for a Strata engine on the desktop app's engine ports (loopback only): GET /health, which Strata documents
+    /// as needing no key. With several engines, a loaded one that accepts the telemetry key is preferred.
+    /// </summary>
+    private async Task<string?> FindEngineAsync(CancellationToken ct)
+    {
+        var current = new Uri(_activeBase);
+        var configured = new Uri(_options.BaseUrl);
+        var ports = (_options.ScanPorts ?? DesktopEnginePorts).Append(configured.Port).Distinct().Where(p => p != current.Port).ToList();
+        var probeTimeout = TimeSpan.FromMilliseconds(Math.Min(_options.Timeout.TotalMilliseconds, 1500));
+
+        async Task<(int Port, StrataHealth? Health)> Probe(int port)
+        {
+            using var client = new StrataHttpClient(new Uri($"http://{current.Host}:{port}"), null, probeTimeout, _handler);
+            using var health = await client.GetAsync(StrataEndpoints.Health, sendCredential: false, ct).ConfigureAwait(false);
+            return (port, health.IsSuccess ? StrataParser.ParseHealth(health.Json!.RootElement) : null);
+        }
+
+        var results = await Task.WhenAll(ports.Select(Probe)).ConfigureAwait(false);
+        var candidates = results.Where(r => r.Health?.Service == "strata")
+            .OrderByDescending(r => r.Health!.Loaded == true).ThenBy(r => r.Port).Select(r => $"http://{current.Host}:{r.Port}").ToList();
+        if (candidates.Count <= 1 || !_client.HasCredential)
+        {
+            return candidates.FirstOrDefault();
+        }
+
+        foreach (var candidate in candidates)
+        {
+            using var client = new StrataHttpClient(new Uri(candidate), _options.Credential, _options.Timeout, _handler);
+            using var telemetry = await client.GetAsync(StrataEndpoints.Telemetry, sendCredential: true, ct).ConfigureAwait(false);
+            if (telemetry.IsSuccess)
+            {
+                return candidate;
+            }
+        }
+
+        return candidates[0];
+    }
+
+    private void SwitchTo(string baseUrl)
+    {
+        _log.Info("strata", $"Strata 엔진을 {baseUrl}에서 찾았습니다 (설정 주소 {_options.BaseUrl}, 포트 자동 찾기).");
+        _retiredClients.Add(_client); // a metadata refresh may still be using it; disposed with the adapter
+        _client = new StrataHttpClient(new Uri(baseUrl), _options.Credential, _options.Timeout, _handler);
+        _activeBase = baseUrl;
+        _preferLegacy = false;
+        _previousCounter = null;
+        lock (_metaGate)
+        {
+            _metadataFetchedAt = DateTimeOffset.MinValue;
+            _metadataKey = null;
+        }
     }
 
     private async Task<(StrataTelemetry? Telemetry, RuntimeError? Error)> FetchTelemetryAsync(DateTimeOffset now, CancellationToken ct)
@@ -237,10 +332,13 @@ public sealed class StrataAdapter : IAiRuntimeAdapter
             ? SlowRetry
             : TimeSpan.FromSeconds(Math.Min(MaxBackoff.TotalSeconds, Math.Pow(2, Math.Min(_consecutiveFailures - 1, 5))));
         _nextAttempt = now + delay;
-        if (state == RuntimeConnectionState.AuthRequired && error.Hint is not null && _options.CredentialVariable is string variable
-            && variable != StrataSettings.DefaultKeyVariable)
+        if (error.Hint is not null && error.Hint.Contains(StrataHttpClient.KeyVariablePlaceholder, StringComparison.Ordinal))
         {
-            error = error with { Hint = error.Hint.Replace(StrataSettings.DefaultKeyVariable, variable, StringComparison.Ordinal) };
+            error = error with
+            {
+                Hint = error.Hint.Replace(StrataHttpClient.KeyVariablePlaceholder,
+                    string.IsNullOrWhiteSpace(_options.CredentialVariable) ? StrataSettings.DefaultKeyVariable : _options.CredentialVariable, StringComparison.Ordinal),
+            };
         }
 
         LogState(state, error);
@@ -249,7 +347,7 @@ public sealed class StrataAdapter : IAiRuntimeAdapter
             RuntimeKind = Kind,
             Timestamp = now,
             State = state,
-            Endpoint = _options.BaseUrl,
+            Endpoint = _activeBase,
             Error = error,
             LastSuccess = _lastSuccess,
             NextRetryAt = _nextAttempt,
@@ -400,7 +498,7 @@ public sealed class StrataAdapter : IAiRuntimeAdapter
             RuntimeKind = Kind,
             Timestamp = now,
             State = state,
-            Endpoint = _options.BaseUrl,
+            Endpoint = _activeBase,
             Error = state == RuntimeConnectionState.Limited
                 ? new RuntimeError(RuntimeErrorCategory.Compatibility, "이 Strata 버전은 실시간 텔레메트리를 제공하지 않아 모델·상태 정보만 표시합니다.", "Strata를 업데이트하면 처리량·지연 정보를 볼 수 있습니다.")
                 : null,
@@ -431,7 +529,7 @@ public sealed class StrataAdapter : IAiRuntimeAdapter
         _lastLoggedState = state;
         if (error is null)
         {
-            _log.Info("strata", $"상태: {RuntimeStateText.ToKorean(state)} ({_options.BaseUrl})");
+            _log.Info("strata", $"상태: {RuntimeStateText.ToKorean(state)} ({_activeBase})");
         }
         else
         {

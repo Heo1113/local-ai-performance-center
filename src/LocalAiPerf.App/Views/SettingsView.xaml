@@ -63,6 +63,7 @@
             <TextBox Text="{Binding StrataUrl}" Width="300" />
             <TextBlock Text="기본 http://127.0.0.1:8080. 원격은 https만 허용." Style="{StaticResource Caption}" Margin="10,0,0,0" VerticalAlignment="Center" />
           </DockPanel>
+          <CheckBox Content="포트 자동 찾기 (응답이 없으면 데스크톱 앱 엔진 포트 127.0.0.1:18500~18520에서 /health로 Strata를 찾음)" IsChecked="{Binding StrataAutoFindPort}" Margin="0,4" />
           <DockPanel Style="{StaticResource Row}">
             <TextBlock Text="API 키 환경 변수 이름" Style="{StaticResource FieldLabel}" />
             <TextBox Text="{Binding KeyVariable, UpdateSourceTrigger=PropertyChanged}" Width="300" />

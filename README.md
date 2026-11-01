@@ -45,20 +45,33 @@ GPU·CPU·RAM 사용량과 AI 추론 성능을 실시간으로 보여 주고, SQ
 
 ### Strata 연결
 
-- 기본 주소는 `http://127.0.0.1:8080`입니다(Strata 데스크톱 앱과 `strata launch`의 기본 엔진 포트). 설정에서 바꿀 수 있습니다.
+- 기본 주소는 `http://127.0.0.1:8080`입니다(`strata launch` 기본 포트). 설정에서 바꿀 수 있습니다.
 - 사용하는 엔드포인트(모두 GET): `/v1/telemetry`(schema v1), 404일 때만 `/metrics` + `/v1/status`(구버전), `/health`, `/v1/status`, `/props`, `/v1/models`.
   `/status`는 마지막 답변 일부를 포함할 수 있어 호출하지 않습니다. 자세한 근거는 [docs/STRATA_API.md](docs/STRATA_API.md).
-- Strata에 API 키가 설정되어 있으면 **읽기 전용 텔레메트리 키**를 사용자 환경 변수 `STRATA_TELEMETRY_KEY`(이름은 설정에서 변경 가능)에 넣고 앱을 다시 시작하세요.
-  키 값은 이 앱의 설정·DB·로그·내보내기에 저장되지 않습니다. 텔레메트리 키만 있으면 엔진 버전·기본 생성 설정(`/v1/status`, `/props`)은 N/A로 남을 수 있습니다.
-- **Strata 데스크톱 앱으로 모델을 실행한 경우:** 앱이 모델을 로드할 때마다 엔진 포트와 엔진 키를 새로 만들고 공개하지 않습니다
-  (Strata `apps/host/server/native-control.mjs`). 앱의 Serving API 키는 앱 호스트(기본 47831)의 채팅 API용이라 엔진 텔레메트리에 쓸 수 없고,
-  호스트는 `/v1/telemetry`를 내보내지 않습니다. 이 프로그램은 Strata 내부 파일을 읽지 않으므로, 이 경우 Strata 정보는 "인증 필요"로 남고
-  하드웨어 모니터링·기록은 계속됩니다. 추론 정보까지 보려면 **Strata Terminal(`strata launch`)** 로 모델을 실행하세요(포트 고정, 키는 `strata launch --show-key`).
+- 키는 **읽기 전용 텔레메트리 키**를 사용자 환경 변수 `STRATA_TELEMETRY_KEY`(이름은 설정에서 변경 가능)에 넣습니다.
+  키 값은 이 앱의 설정·DB·로그·내보내기에 저장되지 않습니다. 텔레메트리 키로는 엔진 버전·기본 생성 설정(`/v1/status`, `/props`)이 N/A로 남습니다(Strata가 정한 권한 범위).
+- **포트 자동 찾기**(기본 켜짐): 설정한 주소가 응답하지 않으면 Strata 데스크톱 앱이 엔진에 쓰는 포트 `127.0.0.1:18500~18520`에서
+  인증 없는 `/health`로 Strata를 찾아 연결합니다. 모델을 다시 로드해 포트가 바뀌어도 따라가며, 저장된 설정 주소는 바꾸지 않습니다.
 - 원격 서버는 https만 허용합니다(평문 http는 127.0.0.1/localhost만).
 
-### 추론 측정 (Strata 데스크톱 앱 사용 시)
+#### Strata 데스크톱 앱에서 실시간 값 보기 (사용자 PC에서 연결 확인)
 
-데스크톱 앱은 엔진 텔레메트리를 공개하지 않으므로, 앱의 공개 채팅 API로 성능을 직접 잽니다.
+데스크톱 앱은 모델을 로드할 때마다 엔진 포트와 엔진 API 키를 새로 만들지만, 엔진은 시작할 때 환경 변수 `STRATA_TELEMETRY_KEY`를
+읽기 전용 텔레메트리 키로 받습니다(Strata `serve/server.py`, `docs/TERMINAL.md`). 앱은 이 변수를 엔진에 그대로 넘깁니다.
+
+1. 무작위 키를 사용자 환경 변수로 만듭니다(키 값은 화면에 나오지 않습니다).
+   ```powershell
+   $b = New-Object byte[] 32; [Security.Cryptography.RandomNumberGenerator]::Create().GetBytes($b); [Environment]::SetEnvironmentVariable("STRATA_TELEMETRY_KEY", (-join ($b | ForEach-Object { $_.ToString('x2') })), "User")
+   ```
+2. Strata 앱을 트레이까지 완전히 종료한 뒤 다시 실행하고 모델을 로드합니다.
+3. 이 프로그램을 다시 시작합니다. 포트 자동 찾기가 엔진을 찾아 "연결됨"이 됩니다.
+
+되돌리기: `[Environment]::SetEnvironmentVariable("STRATA_TELEMETRY_KEY", $null, "User")` 후 Strata 앱 재시작.
+이 키는 `/v1/telemetry`만 허용하며 추론·관리 기능에는 쓸 수 없습니다. Serving API 키와 같은 값이면 엔진이 거부합니다.
+
+### 추론 측정 (선택)
+
+같은 조건의 시험 문장으로 생성 속도를 반복 측정해 추이를 봅니다. 위의 실시간 값과 별개로, 업데이트 전후를 같은 조건으로 비교할 때 씁니다.
 
 1. Strata 앱에서 **Strata를 앱에 연결** 화면을 엽니다. 주소가 `http://127.0.0.1:47831/v1`인지 확인합니다.
 2. 그 화면의 API 키를 사용자 환경 변수 `STRATA_APP_API_KEY`에 넣습니다(PowerShell, 키 값은 직접 붙여 넣으세요).
@@ -71,7 +84,7 @@ GPU·CPU·RAM 사용량과 AI 추론 성능을 실시간으로 보여 주고, SQ
 
 - 보내는 것: 고정 시험 문장 1개(`Explain how a rainbow forms in clear, simple language.`), 사고 끔, temperature 0, 최대 200 토큰. Strata 앱 자체 벤치마크와 같은 조건입니다.
 - 결과: 첫 토큰까지 시간(앱 실측), 생성 속도(앱 계산값과 엔진 보고값), 프롬프트 처리 속도(엔진 보고). 기록 중인 세션에 함께 저장되어 기록·비교 화면에서 볼 수 있습니다.
-- 사용자의 실제 대화 속도는 읽을 수 없습니다. 이 기능은 같은 조건의 반복 측정으로 업데이트·설정 변경 전후 추이를 보는 용도입니다.
+- 사용자의 실제 대화 속도는 위의 텔레메트리(실시간 값)로 봅니다. 이 기능은 같은 조건의 반복 측정용입니다.
 - 측정 요청이 GPU를 잠시 쓰고, 엔진의 프롬프트 캐시가 바뀌어 진행 중인 대화의 다음 응답이 조금 늦어질 수 있습니다.
 - Strata의 **로컬 공유**는 켤 필요가 없습니다. 같은 추론 API를 네트워크의 다른 장치에 공개할 뿐이고 텔레메트리는 열리지 않습니다.
 

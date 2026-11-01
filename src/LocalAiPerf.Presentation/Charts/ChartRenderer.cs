@@ -10,9 +10,31 @@ namespace LocalAiPerf.Presentation.Charts;
 /// </summary>
 public static class ChartRenderer
 {
-    /// <summary>A font with Hangul glyphs: Malgun Gothic ships with Windows; the others are for Linux build machines.</summary>
-    private static readonly string? Font = new[] { "Malgun Gothic", "NanumGothic", "Noto Sans CJK KR", "Noto Sans KR" }
-        .FirstOrDefault(name => SkiaSharp.SKFontManager.Default.MatchFamily(name) is { } typeface && typeface.FamilyName == name);
+    private static readonly string[] HangulFontCandidates = ["Malgun Gothic", "NanumGothic", "Noto Sans CJK KR", "Noto Sans KR"];
+
+    /// <summary>
+    /// A font that really has Hangul glyphs. Malgun Gothic ships with Windows; the others are for Linux build machines.
+    /// The check is on glyphs, not on the reported family name: a localized system can report Malgun Gothic as "맑은 고딕";
+    /// comparing names then rejected it and charts fell back to a font without Hangul (legend drawn as boxes on a user's PC).
+    /// </summary>
+    internal static readonly string? Font = ResolveHangulFont(HangulFontCandidates, SkiaSharp.SKFontManager.Default.MatchFamily);
+
+    /// <param name="match">Finds the installed typeface for a family name (the caller's typeface is disposed here).</param>
+    internal static string? ResolveHangulFont(IEnumerable<string> candidates, Func<string, SkiaSharp.SKTypeface?> match)
+    {
+        foreach (var name in candidates)
+        {
+            using var typeface = match(name);
+            if (typeface is not null && typeface.ContainsGlyph('가'))
+            {
+                return name;
+            }
+        }
+
+        // Any installed font with Hangul (for example on a system without Malgun Gothic).
+        using var fallback = SkiaSharp.SKFontManager.Default.MatchCharacter(null, SkiaSharp.SKFontStyle.Normal, ["ko-KR", "ko"], '가');
+        return fallback?.FamilyName;
+    }
 
     /// <summary>Returns false when there is nothing to draw (the caller shows <see cref="ChartModel.EmptyText"/>).</summary>
     public static bool Render(Plot plot, ChartModel? model)

@@ -47,6 +47,7 @@ public sealed partial class SettingsViewModel : PageViewModel
     [ObservableProperty] public partial bool StrataEnabled { get; set; }
     [ObservableProperty] public partial string StrataUrl { get; set; } = "";
     [ObservableProperty] public partial string KeyVariable { get; set; } = "";
+    [ObservableProperty] public partial bool StrataAutoFindPort { get; set; }
     [ObservableProperty] public partial int TimeoutMs { get; set; }
     [ObservableProperty] public partial int MetadataRefreshSeconds { get; set; }
     [ObservableProperty] public partial string BenchUrl { get; set; } = "";
@@ -93,6 +94,7 @@ public sealed partial class SettingsViewModel : PageViewModel
         StrataEnabled = s.Strata.Enabled;
         StrataUrl = s.Strata.BaseUrl;
         KeyVariable = s.Strata.ApiKeyEnvironmentVariable ?? "";
+        StrataAutoFindPort = s.Strata.AutoFindPort;
         TimeoutMs = s.Strata.TimeoutMs;
         MetadataRefreshSeconds = s.Strata.MetadataRefreshSeconds;
         BenchUrl = s.Benchmark.BaseUrl;
@@ -138,7 +140,7 @@ public sealed partial class SettingsViewModel : PageViewModel
             : !AppSettings.IsValidEnvironmentVariableName(name)
                 ? "환경 변수 이름 형식이 올바르지 않습니다."
                 : string.IsNullOrEmpty(Environment.GetEnvironmentVariable(name))
-                    ? $"{name}: 값 없음. 키가 필요한 Strata라면 이 이름의 사용자 환경 변수를 만들고 앱을 다시 시작하세요. 키는 이 앱에 저장되지 않습니다."
+                    ? $"{name}: 값 없음. 키가 필요한 Strata라면 이 이름의 사용자 환경 변수를 만들고 앱을 다시 시작하세요. 데스크톱 앱 엔진은 같은 값을 STRATA_TELEMETRY_KEY로 받아야 합니다(Strata 앱 재시작 필요). 키는 이 앱에 저장되지 않습니다."
                     : $"{name}: 값 있음 (내용은 표시하거나 저장하지 않음)";
     }
 
@@ -153,6 +155,7 @@ public sealed partial class SettingsViewModel : PageViewModel
         s.Strata.Enabled = StrataEnabled;
         s.Strata.BaseUrl = StrataUrl;
         s.Strata.ApiKeyEnvironmentVariable = string.IsNullOrWhiteSpace(KeyVariable) ? null : KeyVariable.Trim();
+        s.Strata.AutoFindPort = StrataAutoFindPort;
         s.Strata.TimeoutMs = TimeoutMs;
         s.Strata.MetadataRefreshSeconds = MetadataRefreshSeconds;
         s.Benchmark.BaseUrl = BenchUrl;

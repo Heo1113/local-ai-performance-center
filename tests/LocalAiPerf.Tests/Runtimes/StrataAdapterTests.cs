@@ -240,4 +240,68 @@ public class StrataConnectTests
     [Fact]
     public void Connect_deadline_fires_before_the_request_deadline()
         => Assert.True(StrataHttpClient.ConnectDeadline(TimeSpan.FromSeconds(2)) < TimeSpan.FromSeconds(2));
+
+    [Fact]
+    public async Task Port_search_follows_the_engine_to_a_new_port_without_changing_the_setting()
+    {
+        await using var other = new MockStrataServer(mode: MockMode.WrongService); // something else on an engine port
+        other.Start();
+        await using var engine = new MockStrataServer(mode: MockMode.AuthRequired) { RequiredKey = "tele-key" };
+        engine.Start();
+        using var adapter = new StrataAdapter(new StrataAdapterOptions("http://127.0.0.1:9", "tele-key", TimeSpan.FromSeconds(2), TimeSpan.FromSeconds(30),
+            "STRATA_TELEMETRY_KEY", AutoFindPort: true, ScanPorts: [other.Port, engine.Port]));
+
+        var snapshot = await adapter.PollAsync(TestContext.Current.CancellationToken);
+
+        Assert.Equal(RuntimeConnectionState.Connected, snapshot.State);
+        Assert.Equal(engine.BaseUrl, adapter.EndpointDisplay);
+        Assert.Equal("http://127.0.0.1:9", adapter.ConfiguredEndpoint);
+        Assert.Equal(engine.BaseUrl, snapshot.Endpoint);
+        // The search itself only asked /health, and never sent the key to the other program.
+        Assert.All(other.Requests, r => Assert.Equal(("GET", "/health", false), (r.Method, r.Path, r.HadAuthorization)));
+    }
+
+    [Fact]
+    public async Task Port_search_prefers_the_engine_that_accepts_the_key_and_is_off_when_disabled()
+    {
+        await using var foreign = new MockStrataServer(mode: MockMode.AuthRequired) { RequiredKey = "someone-elses-key" };
+        foreign.Start();
+        await using var mine = new MockStrataServer(mode: MockMode.AuthRequired) { RequiredKey = "tele-key" };
+        mine.Start();
+        var ports = new[] { foreign.Port, mine.Port }.Order().ToArray();
+
+        using (var adapter = new StrataAdapter(new StrataAdapterOptions("http://127.0.0.1:9", "tele-key", TimeSpan.FromSeconds(2), TimeSpan.FromSeconds(30),
+                   "STRATA_TELEMETRY_KEY", AutoFindPort: true, ScanPorts: ports)))
+        {
+            var snapshot = await adapter.PollAsync(TestContext.Current.CancellationToken);
+            Assert.Equal(RuntimeConnectionState.Connected, snapshot.State);
+            Assert.Equal(mine.BaseUrl, adapter.EndpointDisplay);
+        }
+
+        var before = mine.Requests.Count;
+        using var off = new StrataAdapter(new StrataAdapterOptions("http://127.0.0.1:9", "tele-key", TimeSpan.FromSeconds(2), TimeSpan.FromSeconds(30),
+            "STRATA_TELEMETRY_KEY", AutoFindPort: false, ScanPorts: ports));
+        var unreachable = await off.PollAsync(TestContext.Current.CancellationToken);
+        Assert.Equal(RuntimeConnectionState.Unreachable, unreachable.State);
+        Assert.Null(off.ConfiguredEndpoint);
+        Assert.Equal(before, mine.Requests.Count);
+    }
+
+    [Fact]
+    public async Task Wrong_key_hint_explains_the_desktop_app_setup()
+    {
+        await using var server = new MockStrataServer(mode: MockMode.AuthRequired) { RequiredKey = "tele-key" };
+        server.Start();
+        using var adapter = new StrataAdapter(new StrataAdapterOptions(server.BaseUrl, "wrong", TimeSpan.FromSeconds(2), TimeSpan.FromSeconds(30), "MY_KEY_VAR"));
+        var snapshot = await adapter.PollAsync(TestContext.Current.CancellationToken);
+        Assert.Equal(RuntimeConnectionState.AuthRequired, snapshot.State);
+        Assert.Contains("STRATA_TELEMETRY_KEY", snapshot.Error!.Hint); // the variable Strata itself reads
+        Assert.DoesNotContain("{key-variable}", snapshot.Error.Hint);
+        Assert.DoesNotContain("wrong", snapshot.Error.Hint);
+
+        using var noKey = new StrataAdapter(new StrataAdapterOptions(server.BaseUrl, null, TimeSpan.FromSeconds(2), TimeSpan.FromSeconds(30), "MY_KEY_VAR"));
+        var missing = await noKey.PollAsync(TestContext.Current.CancellationToken);
+        Assert.Contains("MY_KEY_VAR", missing.Error!.Hint); // the variable this app reads
+    }
 }
+

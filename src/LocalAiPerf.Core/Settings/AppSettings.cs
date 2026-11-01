@@ -146,6 +146,12 @@ public sealed class StrataSettings
     public string? ApiKeyEnvironmentVariable { get; set; } = DefaultKeyVariable;
     public int TimeoutMs { get; set; } = 2000;
     public int MetadataRefreshSeconds { get; set; } = 30;
+
+    /// <summary>
+    /// When the address does not answer, look for a Strata engine on the desktop app's engine ports (127.0.0.1:18500-18520,
+    /// GET /health only) and connect to it for this run. The saved address is not changed.
+    /// </summary>
+    public bool AutoFindPort { get; set; } = true;
 }
 
 /// <summary>
