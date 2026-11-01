@@ -111,7 +111,7 @@ public sealed partial class RuntimeViewModel(MonitoringService service) : PageVi
         Server.Add(new ValueRow("서버 API 키 설정", Fmt.Bool(rt.Server?.ApiKeyConfigured), Reported));
 
         Model.Clear();
-        Model.Add(new ValueRow("모델", rt.Model?.Id ?? Fmt.NA, Reported, rt.IsReachable ? "" : "마지막으로 확인된 값"));
+        Model.Add(new ValueRow("모델", rt.Model?.Id ?? Fmt.NA, Reported, rt.IsReachable || rt.Model?.Id is null ? "" : "마지막으로 확인된 값"));
         Model.Add(new ValueRow("로드 상태", Fmt.Bool(rt.Model?.Loaded), Reported));
         Model.Add(new ValueRow("모델 파일", rt.Model?.ModelFileName ?? Fmt.NA, Reported, "파일 이름만 표시 (경로 제외)"));
         Model.Add(new ValueRow("컨텍스트 한도", Fmt.Int(rt.Model?.ContextTokens, "tokens"), Reported));
