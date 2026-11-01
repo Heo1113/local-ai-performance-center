@@ -10,6 +10,7 @@ using LocalAiPerf.Core.Settings;
 using LocalAiPerf.Export;
 using LocalAiPerf.Recording;
 using LocalAiPerf.Runtimes;
+using LocalAiPerf.Runtimes.Benchmark;
 using LocalAiPerf.Storage;
 using LocalAiPerf.Telemetry;
 
@@ -26,6 +27,9 @@ public static class Program
         사용법:
           lapc sensors   [--mock-sensors]                        센서 지원 표와 현재 값 1회 출력
           lapc strata    [--strata-url URL]                      Strata 연결 상태와 공개 API 정보 확인 (읽기 전용)
+          lapc bench     [--repeat N] [--url URL] [--model ID] [--max-tokens N] [--no-save]
+                                                                 고정 시험 문장을 채팅 API로 보내 생성 속도·첫 토큰 시간 측정
+                                                                 (키: 환경 변수 STRATA_APP_API_KEY, 설정에서 이름 변경 가능)
           lapc record    [--seconds N] [--interval-ms N] [--name NAME] [--strata-url URL] [--no-strata] [--mock-sensors]
           lapc sessions  [--filter TEXT]                         기록된 세션 목록
           lapc export    --session ID --format csv|json --out PATH
@@ -60,6 +64,7 @@ public static class Program
             {
                 "sensors" => await SensorsAsync(options),
                 "strata" => await StrataAsync(options),
+                "bench" => await BenchAsync(options),
                 "record" => await RecordAsync(options),
                 "sessions" => Sessions(options),
                 "export" => Export(options),
@@ -203,6 +208,61 @@ public static class Program
         }
 
         return snapshot.IsReachable ? 0 : 1;
+    }
+
+    private static async Task<int> BenchAsync(Options options)
+    {
+        var (paths, settings) = Load(options);
+        var bench = settings.Benchmark;
+        bench.BaseUrl = options.Get("url") ?? bench.BaseUrl;
+        bench.Model = options.Get("model") ?? bench.Model;
+        bench.MaxTokens = options.GetInt("max-tokens") ?? bench.MaxTokens;
+        bench.Repeat = options.GetInt("repeat") ?? bench.Repeat;
+        foreach (var note in settings.Normalize())
+        {
+            Console.Error.WriteLine($"설정: {note}");
+        }
+
+        using var client = ChatBenchmarkClient.FromSettings(bench);
+        Console.WriteLine($"대상: {client.Endpoint}/v1/chat/completions, API 키: {(client.HasKey ? "있음" : "없음")} ({bench.ApiKeyEnvironmentVariable ?? "사용 안 함"})");
+        var (model, error) = await client.ResolveModelAsync(CancellationToken.None);
+        if (model is null)
+        {
+            Console.WriteLine($"측정 불가 [{RuntimeStateText.ToKorean(error!.Category)}] {error.Message}");
+            if (error.Hint is not null)
+            {
+                Console.WriteLine($"안내: {error.Hint}");
+            }
+
+            return 1;
+        }
+
+        Console.WriteLine($"모델: {model}, 최대 {bench.MaxTokens} 토큰, {bench.Repeat}회, 시험 문장 ID {ChatBenchmarkClient.PromptId} (응답 내용은 저장하지 않음)");
+        using var store = options.Has("no-save") ? null : TelemetryStore.Open(paths.DatabasePath);
+        var ok = 0;
+        for (var i = 0; i < bench.Repeat; i++)
+        {
+            var run = await client.RunOnceAsync(model, DateTimeOffset.Now, CancellationToken.None);
+            store?.WriteBenchmark(null, run);
+            if (run.Success)
+            {
+                ok++;
+                Console.WriteLine($"  #{i + 1} 첫 토큰 {Fmt(run.FirstTokenMs, "0")} ms (앱 측정) · 생성 {Fmt(run.ClientDecodeTokPerSec, "0.0")} tok/s (앱 측정·계산값) / "
+                    + $"{Fmt(run.EngineDecodeTokPerSec, "0.0")} tok/s (엔진 보고) · 프롬프트 {Fmt(run.EnginePromptTokPerSec, "0.0")} tok/s (엔진 보고) · "
+                    + $"출력 {run.CompletionTokens?.ToString(CultureInfo.InvariantCulture) ?? "N/A"} 토큰 · 전체 {Fmt(run.TotalMs / 1000, "0.00")} s");
+            }
+            else
+            {
+                Console.WriteLine($"  #{i + 1} 실패 [{(run.ErrorCategory is { } c ? RuntimeStateText.ToKorean(c) : "-")}] {run.Error}");
+                if (run.ErrorCategory is RuntimeErrorCategory.Connection or RuntimeErrorCategory.Authentication or RuntimeErrorCategory.Compatibility)
+                {
+                    break;
+                }
+            }
+        }
+
+        Console.WriteLine(store is null ? "저장 안 함 (--no-save)" : $"저장: {paths.DatabasePath}");
+        return ok > 0 ? 0 : 1;
     }
 
     private static async Task<int> RecordAsync(Options options)
@@ -439,7 +499,7 @@ public static class Program
     private sealed class Options
     {
         private readonly Dictionary<string, string?> _values = new(StringComparer.OrdinalIgnoreCase);
-        private static readonly HashSet<string> Flags = new(StringComparer.OrdinalIgnoreCase) { "mock-sensors", "no-strata", "force", "yes" };
+        private static readonly HashSet<string> Flags = new(StringComparer.OrdinalIgnoreCase) { "mock-sensors", "no-strata", "force", "yes", "no-save" };
 
         public string? Error { get; private set; }
 

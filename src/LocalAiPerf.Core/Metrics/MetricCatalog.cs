@@ -20,6 +20,9 @@ public enum MetricGroup
     Runtime,
     Request,
     Efficiency,
+
+    /// <summary>Opt-in measurement runs (fixed test prompt sent by this app on request).</summary>
+    Benchmark,
 }
 
 public sealed record MetricDefinition(
@@ -74,6 +77,10 @@ public static class MetricKeys
     public const string ReqDurationS = "req.duration_s";
     public const string ReqOutputTokens = "req.output_tokens";
     public const string EffTokensPerJoule = "eff.tokens_per_joule";
+    public const string BenchDecodeTokS = "bench.decode_tok_s";
+    public const string BenchEngineDecodeTokS = "bench.engine_decode_tok_s";
+    public const string BenchEnginePromptTokS = "bench.engine_prompt_tok_s";
+    public const string BenchFirstTokenMs = "bench.ttft_ms";
 }
 
 /// <summary>The single list of metrics the app records, shows, exports and compares.</summary>
@@ -83,6 +90,7 @@ public static class MetricCatalog
     private const string WinApi = "Windows API (GetSystemTimes / GlobalMemoryStatusEx)";
     private const string StrataTelemetry = "Strata /v1/telemetry";
     private const string StrataRecent = "Strata 완료 요청 요약 (recent[])";
+    private const string Bench = "측정 요청 (고정 시험 문장, 사용자가 실행)";
 
     public static IReadOnlyList<MetricDefinition> All { get; } =
     [
@@ -114,6 +122,10 @@ public static class MetricCatalog
         new(MetricKeys.ReqDurationS, "요청 처리 시간", "s", MetricOrigin.Reported, MetricGroup.Request, StrataRecent + " duration_s", false, "F2"),
         new(MetricKeys.ReqOutputTokens, "요청별 출력 토큰", "tokens", MetricOrigin.Reported, MetricGroup.Request, StrataRecent + " output_tokens", null, "F0"),
         new(MetricKeys.EffTokensPerJoule, "전력 효율 (토큰/J)", "tok/J", MetricOrigin.Derived, MetricGroup.Efficiency, "전체 출력 처리량 ÷ 같은 시점 GPU 전력", true, "F2"),
+        new(MetricKeys.BenchDecodeTokS, "측정: 생성 속도 (앱 측정)", "tok/s", MetricOrigin.Derived, MetricGroup.Benchmark, Bench + ": (출력 토큰 − 1) ÷ 첫 토큰~마지막 토큰 수신 시간", true, "F1"),
+        new(MetricKeys.BenchEngineDecodeTokS, "측정: 생성 속도 (엔진 보고)", "tok/s", MetricOrigin.Reported, MetricGroup.Benchmark, Bench + ": 응답 timings.predicted_per_second", true, "F1"),
+        new(MetricKeys.BenchEnginePromptTokS, "측정: 프롬프트 처리 속도 (엔진 보고)", "tok/s", MetricOrigin.Reported, MetricGroup.Benchmark, Bench + ": 응답 timings.prompt_per_second", true, "F1"),
+        new(MetricKeys.BenchFirstTokenMs, "측정: 첫 토큰까지 (앱 측정)", "ms", MetricOrigin.Measured, MetricGroup.Benchmark, Bench + ": 요청 전송~첫 토큰 수신 (클라이언트 TTFT)", false, "F0"),
     ];
 
     private static readonly Dictionary<string, MetricDefinition> ByKey = All.ToDictionary(m => m.Key, StringComparer.Ordinal);

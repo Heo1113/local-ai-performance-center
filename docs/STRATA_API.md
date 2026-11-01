@@ -17,7 +17,7 @@
 ## 사용하지 않는 것
 
 - `GET /status`: 문서와 코드(`serve/server.py`, issue #212 주석)에 따르면 마지막 답변의 끝부분을 포함할 수 있어 호출하지 않습니다.
-- `POST` 전체(추론, `/slots`, `/v1/load`, `/v1/unload`, `/v1/vram` 등), 관리 브리지(`python -m strata_control.management`), Strata 파일·설정·프로세스.
+- 텔레메트리 수집에서는 `POST` 전체(추론, `/slots`, `/v1/load`, `/v1/unload`, `/v1/vram` 등), 관리 브리지(`python -m strata_control.management`), Strata 파일·설정·프로세스.
 - `/props`의 `chat_template`, 모델 파일 전체 경로(사용자 이름이 들어갈 수 있음).
 
 ## 클라이언트 규칙 (Strata 자체 모니터 클라이언트 `strata_cli/client.py`와 동일)
@@ -49,3 +49,26 @@
   앱 호스트(47831)는 `/v1/models`와 추론만 공개하고 `/v1/telemetry`는 공개하지 않습니다.
 - 결론: 데스크톱 앱으로 실행한 엔진의 텔레메트리는 공개 인터페이스로 읽을 수 없습니다. 내부 파일(`native-instances/*.json`)에서 키를 읽는 것은 비공개 인터페이스라 하지 않습니다.
   `strata launch`(Terminal)로 실행한 엔진은 문서화된 경로(`--port`, `--show-key`, `STRATA_TELEMETRY_KEY`)로 연결할 수 있습니다.
+
+## 추론 측정 (사용자가 켜는 기능, POST 1종)
+
+데스크톱 앱 엔진의 텔레메트리를 읽을 수 없으므로, 앱 호스트가 공개하는 추론 API로 성능을 직접 잽니다.
+Strata 앱의 "Strata를 앱에 연결" 화면이 안내하는 주소(`http://127.0.0.1:47831/v1`)와 Serving API 키를 씁니다.
+
+| 항목 | 내용 |
+|---|---|
+| 보내는 요청 | `GET /v1/models`(모델 ID를 비워 둔 경우만), `POST /v1/chat/completions` |
+| 요청 본문 | 고정 시험 문장 1개 `Explain how a rainbow forms in clear, simple language.`(ID `lapc-rainbow-v1`), `temperature 0`, `reasoning_effort "none"`, `max_tokens 200`(설정 가능), `stream true`, `stream_options.include_usage true`. Strata 데스크톱 앱 자체 벤치마크와 같은 문장·설정입니다 |
+| 언제 보내나 | [지금 측정] 버튼, `lapc bench`, 또는 사용자가 켠 자동 측정(기본 꺼짐, N분마다 1회, 최근 15초 GPU 사용률이 기준 이상이면 미룸) |
+| 앱이 재는 값 (실측) | 첫 토큰까지 시간: 요청 전송부터 내용(`content` 또는 `reasoning_content`)이 있는 첫 청크 수신까지 |
+| 앱이 계산하는 값 | 생성 속도 = (출력 토큰 − 1) ÷ 첫 토큰~마지막 토큰 수신 시간. 출력 토큰이 2개 미만이면 N/A |
+| 엔진 보고값 | 마지막 청크의 `usage`(prompt/completion/cached 토큰), `timings.predicted_per_second`, `timings.prompt_per_second` |
+| 저장하지 않는 것 | 응답 내용(시간 측정에만 쓰고 버림), API 키 값 |
+| 영향 | 측정 중 GPU를 잠시 씁니다. 엔진의 프롬프트 캐시가 바뀌어 진행 중인 대화의 다음 응답이 조금 늦어질 수 있습니다 |
+
+## 로컬 공유(LAN 공유)를 쓰지 않는 이유
+
+Strata 앱의 "로컬 공유"(`apps/host/server/local-share.mjs`)는 `0.0.0.0:8792`에서 `/v1/models`, `/v1/chat/completions`, `/v1/messages`만
+허용하고 나머지는 404를 돌려줍니다. 텔레메트리는 여기서도 공개되지 않고, 47831에서 이미 쓸 수 있는 API와 같습니다.
+켜면 같은 네트워크의 다른 장치에 HTTP로 모델이 공개되므로, 이 프로그램은 로컬 공유를 요구하지 않습니다.
+

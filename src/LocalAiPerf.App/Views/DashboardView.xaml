@@ -71,7 +71,7 @@
             <TextBlock Text="{Binding AnswerTokS}" Style="{StaticResource BigValue}" ToolTip="답변 생성 속도 (Strata 보고값, 생성 중일 때만)" />
             <Grid>
               <Grid.ColumnDefinitions><ColumnDefinition Width="Auto" /><ColumnDefinition Width="*" /></Grid.ColumnDefinitions>
-              <Grid.RowDefinitions><RowDefinition /><RowDefinition /><RowDefinition /><RowDefinition /><RowDefinition /><RowDefinition /></Grid.RowDefinitions>
+              <Grid.RowDefinitions><RowDefinition /><RowDefinition /><RowDefinition /><RowDefinition /><RowDefinition /><RowDefinition /><RowDefinition /></Grid.RowDefinitions>
               <TextBlock Text="모델" Style="{StaticResource Label}" />
               <TextBlock Grid.Column="1" Text="{Binding RuntimeModel}" Style="{StaticResource Value}" />
               <TextBlock Grid.Row="1" Text="엔진 버전" Style="{StaticResource Label}" />
@@ -84,6 +84,9 @@
               <TextBlock Grid.Row="4" Grid.Column="1" Text="{Binding Requests}" Style="{StaticResource Value}" />
               <TextBlock Grid.Row="5" Text="컨텍스트" Style="{StaticResource Label}" />
               <TextBlock Grid.Row="5" Grid.Column="1" Text="{Binding Context}" Style="{StaticResource Value}" />
+              <TextBlock Grid.Row="6" Text="최근 측정" Style="{StaticResource Label}" />
+              <TextBlock Grid.Row="6" Grid.Column="1" Text="{Binding LastBenchmark}" Style="{StaticResource Value}" TextWrapping="Wrap"
+                         ToolTip="고정 시험 문장 측정 결과 (앱 측정 생성 속도, 없으면 엔진 보고값)" />
             </Grid>
             <TextBlock Text="{Binding RuntimeMessage}" Style="{StaticResource Caption}" Visibility="{Binding RuntimeMessage, Converter={StaticResource NotEmpty}}" Margin="0,6,0,0" />
             <TextBlock Text="출처: Strata 공개 API (엔진 보고) · 하드웨어 표시는 Strata와 무관하게 계속됩니다" Style="{StaticResource Caption}" Margin="0,6,0,0" />

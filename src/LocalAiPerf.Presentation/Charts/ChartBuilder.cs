@@ -166,6 +166,30 @@ public static class ChartBuilder
         EmptyText = "AI 엔진에서 받은 처리량 값이 없습니다 (생성 중이 아니거나 연결 안 됨)",
     };
 
+    /// <summary>Generation speed of the stored measurement runs over time (successful runs only; points are not gap-split).</summary>
+    public static ChartModel BenchmarkTrend(IEnumerable<Core.Runtime.BenchmarkResult> runs)
+    {
+        var ok = runs.Where(r => r.Success).OrderBy(r => r.StartedAt).ToList();
+        ChartSeries Line(string label, int slot, Func<Core.Runtime.BenchmarkResult, double?> value, bool derived)
+        {
+            var points = ok.Where(r => value(r) is double v && double.IsFinite(v)).ToList();
+            return new ChartSeries(label, points.Select(r => ToX(r.StartedAt)).ToArray(), points.Select(r => value(r)!.Value).ToArray(), ChartPalette.Slot(slot), derived);
+        }
+
+        return new ChartModel
+        {
+            Title = "측정 요청 생성 속도 추이",
+            Unit = "tok/s",
+            Series =
+            [
+                Line("앱 측정 (계산값)", 0, r => r.ClientDecodeTokPerSec, derived: true),
+                Line("엔진 보고", 1, r => r.EngineDecodeTokPerSec, derived: false),
+            ],
+            YMin = 0,
+            EmptyText = "측정 기록이 없습니다. [지금 측정]을 누르거나 설정에서 자동 측정을 켜세요.",
+        };
+    }
+
     /// <summary>A stored metric over a session, with degradation candidates and throttle intervals highlighted.</summary>
     public static ChartModel SessionMetric(MetricDefinition metric, MetricSeries series, int intervalMs,
         IEnumerable<DegradationCandidate> degradations, IEnumerable<ThrottleInterval> throttles)
@@ -192,7 +216,7 @@ public static class ChartBuilder
             Spans = spans,
             YMin = metric.Unit == "%" ? 0 : null,
             ValueFormat = ToFormat(metric.Format),
-            GapThreshold = metric.Group == MetricGroup.Request ? double.PositiveInfinity : TimeGap(TimeSpan.FromMilliseconds(intervalMs)),
+            GapThreshold = IsEventMetric(metric) ? double.PositiveInfinity : TimeGap(TimeSpan.FromMilliseconds(intervalMs)),
             EmptyText = $"이 세션에는 '{metric.DisplayName}' 값이 없습니다 (N/A)",
         };
     }
@@ -209,9 +233,12 @@ public static class ChartBuilder
             s.Series.Points.Select(p => p.Value).ToArray(), s.ColorHex, metric.Origin == MetricOrigin.Derived)).ToList(),
         YMin = metric.Unit == "%" ? 0 : null,
         ValueFormat = ToFormat(metric.Format),
-        GapThreshold = metric.Group == MetricGroup.Request ? double.PositiveInfinity
+        GapThreshold = IsEventMetric(metric) ? double.PositiveInfinity
             : Math.Max(3 * sessions.Select(s => s.IntervalMs).DefaultIfEmpty(1000).Max(), 5000) / 60000.0,
     };
+
+    /// <summary>Values that exist per request or per measurement run, not per sample: points are connected regardless of time gaps.</summary>
+    private static bool IsEventMetric(MetricDefinition metric) => metric.Group is MetricGroup.Request or MetricGroup.Benchmark;
 
     /// <summary>"F1" -> "0.0", "F0" -> "0".</summary>
     public static string ToFormat(string metricFormat)

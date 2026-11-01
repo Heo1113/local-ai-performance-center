@@ -11,6 +11,7 @@ public sealed class AppSettings
     public SamplingSettings Sampling { get; set; } = new();
     public RetentionSettings Retention { get; set; } = new();
     public StrataSettings Strata { get; set; } = new();
+    public BenchmarkSettings Benchmark { get; set; } = new();
     public RecordingSettings Recording { get; set; } = new();
     public AnalysisSettings Analysis { get; set; } = new();
     public UiSettings Ui { get; set; } = new();
@@ -24,6 +25,7 @@ public sealed class AppSettings
         Sampling ??= new();
         Retention ??= new();
         Strata ??= new();
+        Benchmark ??= new();
         Recording ??= new();
         Analysis ??= new();
         Ui ??= new();
@@ -50,6 +52,28 @@ public sealed class AppSettings
             Strata.ApiKeyEnvironmentVariable = null;
         }
 
+        if (!EndpointValidator.TryNormalize(Benchmark.BaseUrl, out var benchUrl, out var benchError))
+        {
+            notes.Add($"추론 측정 주소가 올바르지 않아 기본값으로 되돌렸습니다: {benchError}");
+            Benchmark.BaseUrl = BenchmarkSettings.DefaultBaseUrl;
+        }
+        else
+        {
+            Benchmark.BaseUrl = benchUrl;
+        }
+
+        if (!string.IsNullOrWhiteSpace(Benchmark.ApiKeyEnvironmentVariable) && !IsValidEnvironmentVariableName(Benchmark.ApiKeyEnvironmentVariable))
+        {
+            notes.Add("추론 측정 API 키 환경 변수 이름이 올바르지 않아 비웠습니다.");
+            Benchmark.ApiKeyEnvironmentVariable = null;
+        }
+
+        Benchmark.Model = string.IsNullOrWhiteSpace(Benchmark.Model) ? null : Benchmark.Model.Trim();
+        Benchmark.MaxTokens = Clamp(Benchmark.MaxTokens, 16, 2048, "추론 측정 최대 토큰", notes);
+        Benchmark.Repeat = Clamp(Benchmark.Repeat, 1, 10, "추론 측정 반복 횟수", notes);
+        Benchmark.TimeoutSeconds = Clamp(Benchmark.TimeoutSeconds, 10, 600, "추론 측정 제한 시간", notes);
+        Benchmark.AutoIntervalMinutes = Benchmark.AutoIntervalMinutes <= 0 ? 0 : Clamp(Benchmark.AutoIntervalMinutes, 1, 1440, "자동 측정 간격", notes);
+        Benchmark.AutoSkipGpuUtilPercent = Clamp(Benchmark.AutoSkipGpuUtilPercent, 1, 100, "자동 측정 건너뛰기 GPU 사용률", notes);
         Analysis.DegradationThresholdPercent = Clamp(Analysis.DegradationThresholdPercent, 5, 90, "성능 저하 임계값", notes);
         Analysis.MinDegradationSeconds = Clamp(Analysis.MinDegradationSeconds, 1, 3600, "성능 저하 최소 지속 시간", notes);
         Analysis.BaselineWindowSeconds = Clamp(Analysis.BaselineWindowSeconds, 10, 3600, "기준 구간 길이", notes);
@@ -122,6 +146,35 @@ public sealed class StrataSettings
     public string? ApiKeyEnvironmentVariable { get; set; } = DefaultKeyVariable;
     public int TimeoutMs { get; set; } = 2000;
     public int MetadataRefreshSeconds { get; set; } = 30;
+}
+
+/// <summary>
+/// Opt-in inference measurement through a public OpenAI-compatible chat API (for example the Strata desktop app's
+/// http://127.0.0.1:47831/v1). It sends a fixed test prompt only when the user asks for it, or on the automatic
+/// schedule the user turned on.
+/// </summary>
+public sealed class BenchmarkSettings
+{
+    public const string DefaultBaseUrl = "http://127.0.0.1:47831";
+    public const string DefaultKeyVariable = "STRATA_APP_API_KEY";
+
+    /// <summary>Server root; requests go to {root}/v1/chat/completions.</summary>
+    public string BaseUrl { get; set; } = DefaultBaseUrl;
+
+    /// <summary>Model id; empty = the first model listed by /v1/models.</summary>
+    public string? Model { get; set; }
+
+    /// <summary>Environment variable holding the app's API key. The key itself is never stored.</summary>
+    public string? ApiKeyEnvironmentVariable { get; set; } = DefaultKeyVariable;
+    public int MaxTokens { get; set; } = 200;
+    public int Repeat { get; set; } = 3;
+    public int TimeoutSeconds { get; set; } = 120;
+
+    /// <summary>Automatic measurement every N minutes (one run each). 0 = off (default): the app sends nothing on its own.</summary>
+    public int AutoIntervalMinutes { get; set; }
+
+    /// <summary>An automatic run is postponed while GPU utilization was at or above this value in the last seconds (someone is using the GPU).</summary>
+    public int AutoSkipGpuUtilPercent { get; set; } = 30;
 }
 
 public sealed class RecordingSettings

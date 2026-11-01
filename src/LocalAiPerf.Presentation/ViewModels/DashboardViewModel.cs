@@ -45,6 +45,7 @@ public sealed partial class DashboardViewModel(MonitoringService service) : Page
     [ObservableProperty] public partial string Requests { get; set; } = Fmt.NA;
     [ObservableProperty] public partial string Context { get; set; } = Fmt.NA;
     [ObservableProperty] public partial string RuntimeMessage { get; set; } = "";
+    [ObservableProperty] public partial string LastBenchmark { get; set; } = Fmt.NA;
     [ObservableProperty] public partial string MeasuredAt { get; set; } = Fmt.NA;
     [ObservableProperty] public partial ChartModel? UtilizationChart { get; set; }
     [ObservableProperty] public partial ChartModel? PowerChart { get; set; }
@@ -90,6 +91,11 @@ public sealed partial class DashboardViewModel(MonitoringService service) : Page
 
     private void UpdateRuntime(RuntimeSnapshot? rt)
     {
+        LastBenchmark = service.LastBenchmark is { } bench
+            ? bench.Success
+                ? $"{Fmt.Num(bench.ClientDecodeTokPerSec ?? bench.EngineDecodeTokPerSec, "0.0", "tok/s")} · 첫 토큰 {Fmt.Num(bench.FirstTokenMs, "0", "ms")} · {Fmt.DateTime(bench.StartedAt)}"
+                : $"실패 · {Fmt.DateTime(bench.StartedAt)}"
+            : "기록 없음 (AI 런타임 화면에서 측정)";
         RuntimeName = service.Runtime?.DisplayName ?? "AI 엔진";
         if (service.Runtime is null)
         {

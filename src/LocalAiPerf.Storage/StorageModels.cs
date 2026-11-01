@@ -21,6 +21,7 @@ public static class EventCategories
     public const string Gap = "gap";
     public const string Storage = "storage";
     public const string Retention = "retention";
+    public const string Benchmark = "benchmark";
 }
 
 public sealed record EventRecord(long? SessionId, DateTimeOffset Time, EventSeverity Severity, string Category, string Message);
@@ -91,7 +92,11 @@ public sealed record SessionData(
     IReadOnlyList<RuntimePoint> Runtime,
     IReadOnlyList<RequestRow> Requests,
     IReadOnlyList<RuntimeInfoRow> RuntimeInfo,
-    IReadOnlyList<EventRecord> Events);
+    IReadOnlyList<EventRecord> Events,
+    IReadOnlyList<BenchmarkResult>? Benchmarks = null)
+{
+    public IReadOnlyList<BenchmarkResult> BenchmarkRuns => Benchmarks ?? [];
+}
 
 public sealed record SessionFilter(string? Text = null, DateTimeOffset? From = null, DateTimeOffset? To = null, int Limit = 500);
 

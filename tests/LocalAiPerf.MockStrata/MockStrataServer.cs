@@ -78,6 +78,15 @@ public sealed class MockStrataServer : IAsyncDisposable
     public string EngineVersion { get; set; } = "0.1.55-mock";
     public string InstanceId { get; set; } = "0123456789abcdef0123456789abcdef";
     public long Context { get; set; } = 32768;
+
+    /// <summary>Number of content chunks the mock chat stream sends (one token each).</summary>
+    public int ChatTokens { get; set; } = 12;
+
+    /// <summary>Pause between streamed chunks.</summary>
+    public TimeSpan ChatTokenDelay { get; set; } = TimeSpan.FromMilliseconds(10);
+
+    /// <summary>Body of the last chat request (tests check that only the fixed test prompt is sent).</summary>
+    public string? LastChatBody { get; private set; }
     public double BaseAnswerTokPerSec { get; set; } = 42.0;
 
     /// <summary>When true, the mock behaves as if a request were being generated (rates are non-null).</summary>
@@ -188,6 +197,12 @@ public sealed class MockStrataServer : IAsyncDisposable
                 await Task.Delay(Delay, ct).ConfigureAwait(false);
             }
 
+            if (request.HttpMethod == "POST" && path == "/v1/chat/completions")
+            {
+                await ChatAsync(context, auth, ct).ConfigureAwait(false);
+                return;
+            }
+
             var (status, body, contentType) = Route(request.HttpMethod, path, auth);
             var bytes = Encoding.UTF8.GetBytes(body);
             context.Response.StatusCode = status;
@@ -206,6 +221,68 @@ public sealed class MockStrataServer : IAsyncDisposable
             {
             }
         }
+    }
+
+    /// <summary>OpenAI-style streaming chat answer with usage and llama.cpp-style timings in the final chunk (synthetic).</summary>
+    private async Task ChatAsync(HttpListenerContext context, string? auth, CancellationToken ct)
+    {
+        using (var reader = new StreamReader(context.Request.InputStream, Encoding.UTF8))
+        {
+            LastChatBody = await reader.ReadToEndAsync(ct).ConfigureAwait(false);
+        }
+
+        var response = context.Response;
+        var key = RequiredKey ?? "secret-key";
+        if ((Mode == MockMode.AuthRequired || RequiredKey is not null) && auth != $"Bearer {key}")
+        {
+            await WriteAsync(response, 401, Json(new { error = new { type = "authentication_error", message = "invalid api key" } }), "application/json", ct).ConfigureAwait(false);
+            return;
+        }
+
+        if (Mode == MockMode.ServerError)
+        {
+            await WriteAsync(response, 503, Json(new { error = new { message = "no model loaded" } }), "application/json", ct).ConfigureAwait(false);
+            return;
+        }
+
+        response.StatusCode = 200;
+        response.ContentType = "text/event-stream";
+        response.SendChunked = true;
+        var output = response.OutputStream;
+        async Task Send(object chunk)
+        {
+            var bytes = Encoding.UTF8.GetBytes("data: " + Json(chunk) + "\n\n");
+            await output.WriteAsync(bytes, ct).ConfigureAwait(false);
+            await output.FlushAsync(ct).ConfigureAwait(false);
+        }
+
+        await Send(new { id = "mock", @object = "chat.completion.chunk", choices = new[] { new { index = 0, delta = new { role = "assistant" } } } }).ConfigureAwait(false);
+        for (var i = 0; i < ChatTokens; i++)
+        {
+            await Task.Delay(ChatTokenDelay, ct).ConfigureAwait(false);
+            await Send(new { id = "mock", @object = "chat.completion.chunk", choices = new[] { new { index = 0, delta = new { content = "tok " } } } }).ConfigureAwait(false);
+        }
+
+        await Send(new
+        {
+            id = "mock",
+            @object = "chat.completion.chunk",
+            choices = new[] { new { index = 0, delta = new { }, finish_reason = "length" } },
+            usage = new { prompt_tokens = 21, completion_tokens = ChatTokens, total_tokens = 21 + ChatTokens, prompt_tokens_details = new { cached_tokens = 0 } },
+            timings = new { prompt_n = 21, prompt_ms = 12.5, prompt_per_second = 1680.0, predicted_n = ChatTokens, predicted_ms = 100.0, predicted_per_second = 120.0 },
+        }).ConfigureAwait(false);
+        await output.WriteAsync(Encoding.UTF8.GetBytes("data: [DONE]\n\n"), ct).ConfigureAwait(false);
+        response.Close();
+    }
+
+    private static async Task WriteAsync(HttpListenerResponse response, int status, string body, string contentType, CancellationToken ct)
+    {
+        var bytes = Encoding.UTF8.GetBytes(body);
+        response.StatusCode = status;
+        response.ContentType = contentType;
+        response.ContentLength64 = bytes.Length;
+        await response.OutputStream.WriteAsync(bytes, ct).ConfigureAwait(false);
+        response.Close();
     }
 
     private (int Status, string Body, string ContentType) Route(string method, string path, string? auth)

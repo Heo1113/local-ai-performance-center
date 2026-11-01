@@ -90,10 +90,16 @@ public sealed class TelemetryStore : IDisposable
 
             Exec(connection, "PRAGMA journal_mode=WAL;");
             Exec(connection, "PRAGMA synchronous=FULL;");
-            if (version < 1)
+            if (version < Schema.CurrentVersion)
             {
+                // Additive migrations only: existing rows are never rewritten.
                 using var tx = connection.BeginTransaction();
-                Exec(connection, Schema.V1, tx);
+                if (version < 1)
+                {
+                    Exec(connection, Schema.V1, tx);
+                }
+
+                Exec(connection, Schema.V2, tx);
                 Exec(connection, $"PRAGMA user_version={Schema.CurrentVersion};", tx);
                 tx.Commit();
             }
@@ -524,8 +530,87 @@ public sealed class TelemetryStore : IDisposable
             }
         }
 
-        return new SessionData(session, system, gpu, runtime, requests, info, ListEvents(sessionId, 10_000, connection));
+        return new SessionData(session, system, gpu, runtime, requests, info, ListEvents(sessionId, 10_000, connection),
+            ListBenchmarks(sessionId, 10_000, connection));
     }
+
+    /// <summary>Stores one measurement run. <paramref name="sessionId"/> is the session being recorded, if any.</summary>
+    public long WriteBenchmark(long? sessionId, BenchmarkResult run)
+    {
+        lock (_writeGate)
+        {
+            ThrowIfDisposed();
+            using var command = _writer.CreateCommand();
+            command.CommandText = """
+                INSERT INTO benchmark_runs (session_id, t_ms, endpoint, model, prompt_id, max_tokens, ok, error, error_category, ttft_ms, total_ms,
+                    prompt_tokens, completion_tokens, cached_tokens, decode_tok_s, engine_decode_tok_s, engine_prompt_tok_s)
+                VALUES (@s, @t, @e, @m, @p, @mt, @ok, @err, @cat, @ttft, @total, @pt, @ct, @cached, @dec, @edec, @epre);
+                SELECT last_insert_rowid();
+                """;
+            var error = run.Error is string text ? SecretRedactor.Redact(text.Length > 500 ? text[..500] : text) : null;
+            foreach (var (name, value) in new (string, object?)[]
+            {
+                ("@s", sessionId), ("@t", run.StartedAt.ToUnixTimeMilliseconds()), ("@e", run.Endpoint), ("@m", run.Model), ("@p", run.PromptId),
+                ("@mt", run.MaxTokens), ("@ok", run.Success ? 1 : 0), ("@err", error), ("@cat", run.ErrorCategory is { } c ? (int)c : null),
+                ("@ttft", Finite(run.FirstTokenMs)), ("@total", Finite(run.TotalMs)), ("@pt", run.PromptTokens), ("@ct", run.CompletionTokens),
+                ("@cached", run.CachedTokens), ("@dec", Finite(run.ClientDecodeTokPerSec)), ("@edec", Finite(run.EngineDecodeTokPerSec)),
+                ("@epre", Finite(run.EnginePromptTokPerSec)),
+            })
+            {
+                command.Parameters.AddWithValue(name, value ?? DBNull.Value);
+            }
+
+            return Convert.ToInt64(command.ExecuteScalar(), CultureInfo.InvariantCulture);
+        }
+    }
+
+    /// <summary>Measurement runs of one session, or of all sessions (newest first) when <paramref name="sessionId"/> is null.</summary>
+    public IReadOnlyList<BenchmarkResult> ListBenchmarks(long? sessionId, int limit = 200)
+    {
+        using var connection = OpenReader();
+        return ListBenchmarks(sessionId, limit, connection);
+    }
+
+    private static List<BenchmarkResult> ListBenchmarks(long? sessionId, int limit, SqliteConnection connection)
+    {
+        var list = new List<BenchmarkResult>();
+        using var command = connection.CreateCommand();
+        command.CommandText = sessionId is null
+            ? $"SELECT {BenchmarkColumns} FROM benchmark_runs ORDER BY t_ms DESC LIMIT @l;"
+            : $"SELECT {BenchmarkColumns} FROM benchmark_runs WHERE session_id = @s ORDER BY t_ms LIMIT @l;";
+        command.Parameters.AddWithValue("@s", sessionId ?? (object)DBNull.Value);
+        command.Parameters.AddWithValue("@l", limit);
+        using var r = command.ExecuteReader();
+        while (r.Read())
+        {
+            list.Add(new BenchmarkResult
+            {
+                StartedAt = DateTimeOffset.FromUnixTimeMilliseconds(r.GetInt64(0)),
+                Endpoint = r.GetString(1),
+                Model = S(r, 2),
+                PromptId = r.GetString(3),
+                MaxTokens = r.GetInt32(4),
+                Success = r.GetInt64(5) != 0,
+                Error = S(r, 6),
+                ErrorCategory = I(r, 7) is int cat ? (RuntimeErrorCategory)cat : null,
+                FirstTokenMs = D(r, 8),
+                TotalMs = D(r, 9),
+                PromptTokens = L(r, 10),
+                CompletionTokens = L(r, 11),
+                CachedTokens = L(r, 12),
+                ClientDecodeTokPerSec = D(r, 13),
+                EngineDecodeTokPerSec = D(r, 14),
+                EnginePromptTokPerSec = D(r, 15),
+            });
+        }
+
+        return list;
+    }
+
+    private const string BenchmarkColumns = "t_ms, endpoint, model, prompt_id, max_tokens, ok, error, error_category, ttft_ms, total_ms, "
+        + "prompt_tokens, completion_tokens, cached_tokens, decode_tok_s, engine_decode_tok_s, engine_prompt_tok_s";
+
+    private static object? Finite(double? value) => value is double v && double.IsFinite(v) ? v : null;
 
     public IReadOnlyList<EventRecord> ListEvents(long? sessionId, int limit = 500)
     {
@@ -635,6 +720,7 @@ public sealed class TelemetryStore : IDisposable
                     tx, ("@a", active), ("@cutoff", cutoff));
                 rows += TrimBefore(cutoff, "started_ms < @cutoff", tx, ("@cutoff", cutoff));
                 rows += Execute(_writer, "DELETE FROM events WHERE session_id IS NULL AND t_ms < @cutoff;", tx, ("@cutoff", cutoff));
+                rows += Execute(_writer, "DELETE FROM benchmark_runs WHERE session_id IS NULL AND t_ms < @cutoff;", tx, ("@cutoff", cutoff));
                 tx.Commit();
             }
 
@@ -722,7 +808,7 @@ public sealed class TelemetryStore : IDisposable
 
         foreach (var id in ids)
         {
-            foreach (var table in new[] { "system_samples", "gpu_samples", "runtime_samples", "events" })
+            foreach (var table in new[] { "system_samples", "gpu_samples", "runtime_samples", "events", "benchmark_runs" })
             {
                 rows += Execute(_writer, $"DELETE FROM {table} WHERE session_id = @id AND t_ms < @cut;", tx, ("@id", id), ("@cut", cutoffMs));
             }

@@ -83,6 +83,52 @@
 
       <Border Style="{StaticResource Card}">
         <StackPanel>
+          <TextBlock Text="추론 측정 (공개 채팅 API, 직접 실행)" Style="{StaticResource SectionTitle}" />
+          <DockPanel Style="{StaticResource Row}">
+            <TextBlock Text="서버 주소" Style="{StaticResource FieldLabel}" />
+            <TextBox Text="{Binding BenchUrl}" Width="300" />
+            <TextBlock Text="Strata 앱 기본 http://127.0.0.1:47831 ('/v1'은 빼고 입력)" Style="{StaticResource Caption}" Margin="10,0,0,0" VerticalAlignment="Center" />
+          </DockPanel>
+          <DockPanel Style="{StaticResource Row}">
+            <TextBlock Text="모델 ID" Style="{StaticResource FieldLabel}" />
+            <TextBox Text="{Binding BenchModel}" Width="300" />
+            <TextBlock Text="비우면 /v1/models의 첫 번째 모델" Style="{StaticResource Caption}" Margin="10,0,0,0" VerticalAlignment="Center" />
+          </DockPanel>
+          <DockPanel Style="{StaticResource Row}">
+            <TextBlock Text="API 키 환경 변수 이름" Style="{StaticResource FieldLabel}" />
+            <TextBox Text="{Binding BenchKeyVariable, UpdateSourceTrigger=PropertyChanged}" Width="300" />
+          </DockPanel>
+          <TextBlock Text="{Binding BenchKeyStatus}" Style="{StaticResource Caption}" Margin="210,0,0,4" />
+          <DockPanel Style="{StaticResource Row}">
+            <TextBlock Text="최대 출력 토큰" Style="{StaticResource FieldLabel}" />
+            <TextBox Text="{Binding BenchMaxTokens}" Width="120" />
+            <TextBlock Text="16~2048, 기본 200 (Strata 자체 벤치마크와 같음)" Style="{StaticResource Caption}" Margin="10,0,0,0" VerticalAlignment="Center" />
+          </DockPanel>
+          <DockPanel Style="{StaticResource Row}">
+            <TextBlock Text="버튼 1회당 반복" Style="{StaticResource FieldLabel}" />
+            <TextBox Text="{Binding BenchRepeat}" Width="120" />
+          </DockPanel>
+          <DockPanel Style="{StaticResource Row}">
+            <TextBlock Text="제한 시간 (초)" Style="{StaticResource FieldLabel}" />
+            <TextBox Text="{Binding BenchTimeoutSeconds}" Width="120" />
+          </DockPanel>
+          <CheckBox Content="자동 측정 사용 (앱이 주기적으로 시험 문장을 보냄)" IsChecked="{Binding BenchAutoEnabled}" Margin="0,6,0,4" />
+          <DockPanel Style="{StaticResource Row}">
+            <TextBlock Text="자동 측정 간격 (분)" Style="{StaticResource FieldLabel}" />
+            <TextBox Text="{Binding BenchAutoMinutes}" Width="120" IsEnabled="{Binding BenchAutoEnabled}" />
+          </DockPanel>
+          <DockPanel Style="{StaticResource Row}">
+            <TextBlock Text="GPU 사용 중 판단 (%)" Style="{StaticResource FieldLabel}" />
+            <TextBox Text="{Binding BenchAutoSkipGpuUtil}" Width="120" IsEnabled="{Binding BenchAutoEnabled}" />
+            <TextBlock Text="최근 15초 GPU 사용률이 이 값 이상이면 그 회차를 미룸" Style="{StaticResource Caption}" Margin="10,0,0,0" VerticalAlignment="Center" />
+          </DockPanel>
+          <TextBlock Style="{StaticResource Caption}" Margin="0,6,0,0"
+                     Text="고정된 시험 문장 하나만 POST /v1/chat/completions로 보내고(사고 끔, temperature 0), 응답은 시간 측정에만 쓰고 저장하지 않습니다. 버튼을 누르거나 자동 측정을 켰을 때만 보냅니다. 측정 요청이 GPU를 잠시 쓰고, 엔진의 프롬프트 캐시가 바뀌어 진행 중인 대화의 다음 응답이 조금 늦어질 수 있습니다." />
+        </StackPanel>
+      </Border>
+
+      <Border Style="{StaticResource Card}">
+        <StackPanel>
           <TextBlock Text="분석" Style="{StaticResource SectionTitle}" />
           <DockPanel Style="{StaticResource Row}">
             <TextBlock Text="성능 저하 임계값 (%)" Style="{StaticResource FieldLabel}" />
@@ -167,7 +213,7 @@
         <StackPanel>
           <TextBlock Text="정보" Style="{StaticResource SectionTitle}" />
           <TextBlock Style="{StaticResource Caption}" Foreground="{StaticResource TextSecondaryBrush}"
-                     Text="Local AI Performance Center - 로컬 AI 추론 환경의 하드웨어·추론 성능 관측 도구. 일반 사용자 권한으로 동작하며 외부 네트워크에 접속하지 않습니다 (설정한 Strata 주소 제외). 사용한 오픈소스의 라이선스는 실행 파일 옆 THIRD-PARTY-NOTICES.md에 있습니다." />
+                     Text="Local AI Performance Center - 로컬 AI 추론 환경의 하드웨어·추론 성능 관측 도구. 일반 사용자 권한으로 동작하며 외부 네트워크에 접속하지 않습니다 (설정한 Strata 주소와 추론 측정 주소 제외). 사용한 오픈소스의 라이선스는 실행 파일 옆 THIRD-PARTY-NOTICES.md에 있습니다." />
         </StackPanel>
       </Border>
     </StackPanel>

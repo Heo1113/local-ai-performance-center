@@ -49,6 +49,16 @@ public sealed partial class SettingsViewModel : PageViewModel
     [ObservableProperty] public partial string KeyVariable { get; set; } = "";
     [ObservableProperty] public partial int TimeoutMs { get; set; }
     [ObservableProperty] public partial int MetadataRefreshSeconds { get; set; }
+    [ObservableProperty] public partial string BenchUrl { get; set; } = "";
+    [ObservableProperty] public partial string BenchModel { get; set; } = "";
+    [ObservableProperty] public partial string BenchKeyVariable { get; set; } = "";
+    [ObservableProperty] public partial string BenchKeyStatus { get; set; } = "";
+    [ObservableProperty] public partial int BenchMaxTokens { get; set; }
+    [ObservableProperty] public partial int BenchRepeat { get; set; }
+    [ObservableProperty] public partial int BenchTimeoutSeconds { get; set; }
+    [ObservableProperty] public partial bool BenchAutoEnabled { get; set; }
+    [ObservableProperty] public partial int BenchAutoMinutes { get; set; }
+    [ObservableProperty] public partial int BenchAutoSkipGpuUtil { get; set; }
     [ObservableProperty] public partial bool AutoRecord { get; set; }
     [ObservableProperty] public partial bool AutoSplit { get; set; }
     [ObservableProperty] public partial double DegradationThreshold { get; set; }
@@ -85,6 +95,15 @@ public sealed partial class SettingsViewModel : PageViewModel
         KeyVariable = s.Strata.ApiKeyEnvironmentVariable ?? "";
         TimeoutMs = s.Strata.TimeoutMs;
         MetadataRefreshSeconds = s.Strata.MetadataRefreshSeconds;
+        BenchUrl = s.Benchmark.BaseUrl;
+        BenchModel = s.Benchmark.Model ?? "";
+        BenchKeyVariable = s.Benchmark.ApiKeyEnvironmentVariable ?? "";
+        BenchMaxTokens = s.Benchmark.MaxTokens;
+        BenchRepeat = s.Benchmark.Repeat;
+        BenchTimeoutSeconds = s.Benchmark.TimeoutSeconds;
+        BenchAutoEnabled = s.Benchmark.AutoIntervalMinutes > 0;
+        BenchAutoMinutes = s.Benchmark.AutoIntervalMinutes > 0 ? s.Benchmark.AutoIntervalMinutes : 10;
+        BenchAutoSkipGpuUtil = s.Benchmark.AutoSkipGpuUtilPercent;
         AutoRecord = s.Recording.AutoRecordOnStartup;
         AutoSplit = s.Recording.AutoSplitOnRuntimeChange;
         DegradationThreshold = s.Analysis.DegradationThresholdPercent;
@@ -98,6 +117,18 @@ public sealed partial class SettingsViewModel : PageViewModel
     }
 
     partial void OnKeyVariableChanged(string value) => UpdateKeyStatus();
+
+    partial void OnBenchKeyVariableChanged(string value)
+    {
+        var name = value?.Trim();
+        BenchKeyStatus = string.IsNullOrEmpty(name)
+            ? "키를 보내지 않습니다."
+            : !AppSettings.IsValidEnvironmentVariableName(name)
+                ? "환경 변수 이름 형식이 올바르지 않습니다."
+                : string.IsNullOrEmpty(Environment.GetEnvironmentVariable(name))
+                    ? $"{name}: 값 없음. Strata 앱 'Strata를 앱에 연결' 화면의 API 키를 이 이름의 사용자 환경 변수로 만들고 이 프로그램을 다시 시작하세요."
+                    : $"{name}: 값 있음 (내용은 표시하거나 저장하지 않음)";
+    }
 
     private void UpdateKeyStatus()
     {
@@ -124,6 +155,14 @@ public sealed partial class SettingsViewModel : PageViewModel
         s.Strata.ApiKeyEnvironmentVariable = string.IsNullOrWhiteSpace(KeyVariable) ? null : KeyVariable.Trim();
         s.Strata.TimeoutMs = TimeoutMs;
         s.Strata.MetadataRefreshSeconds = MetadataRefreshSeconds;
+        s.Benchmark.BaseUrl = BenchUrl;
+        s.Benchmark.Model = string.IsNullOrWhiteSpace(BenchModel) ? null : BenchModel.Trim();
+        s.Benchmark.ApiKeyEnvironmentVariable = string.IsNullOrWhiteSpace(BenchKeyVariable) ? null : BenchKeyVariable.Trim();
+        s.Benchmark.MaxTokens = BenchMaxTokens;
+        s.Benchmark.Repeat = BenchRepeat;
+        s.Benchmark.TimeoutSeconds = BenchTimeoutSeconds;
+        s.Benchmark.AutoIntervalMinutes = BenchAutoEnabled ? Math.Max(1, BenchAutoMinutes) : 0;
+        s.Benchmark.AutoSkipGpuUtilPercent = BenchAutoSkipGpuUtil;
         s.Recording.AutoRecordOnStartup = AutoRecord;
         s.Recording.AutoSplitOnRuntimeChange = AutoSplit;
         s.Analysis.DegradationThresholdPercent = DegradationThreshold;
@@ -142,6 +181,12 @@ public sealed partial class SettingsViewModel : PageViewModel
         if (!EndpointValidator.TryNormalize(StrataUrl, out _, out var urlError))
         {
             Messages.Add($"Strata 주소 오류: {urlError}");
+            return;
+        }
+
+        if (!EndpointValidator.TryNormalize(BenchUrl, out _, out var benchUrlError))
+        {
+            Messages.Add($"추론 측정 주소 오류: {benchUrlError}");
             return;
         }
 

@@ -25,8 +25,12 @@ public sealed record SessionReport(
     int ErrorEvents,
     int GapEvents,
     int RequestCount,
-    int FailedRequestCount)
+    int FailedRequestCount,
+    IReadOnlyList<string>? BenchmarkSetups = null)
 {
+    /// <summary>Distinct "model · prompt · max tokens" setups of the successful measurement runs in this session.</summary>
+    public IReadOnlyList<string> BenchmarkSetupList => BenchmarkSetups ?? [];
+
     public MetricSummary? Get(string key) => Metrics.FirstOrDefault(m => m.Metric.Key == key);
 
     /// <summary>True when a known condition (model, engine version, context, slots, settings) changed inside the session.</summary>
@@ -84,8 +88,11 @@ public static class SessionAnalyzer
             data.Events.Count(e => e.Severity == EventSeverity.Error),
             data.Events.Count(e => e.Category == EventCategories.Gap),
             requests.Count,
-            requests.Count(r => r.IsError));
+            requests.Count(r => r.IsError),
+            data.BenchmarkRuns.Where(b => b.Success).Select(BenchmarkSetup).Distinct(StringComparer.Ordinal).ToList());
     }
+
+    public static string BenchmarkSetup(BenchmarkResult run) => $"{run.Model ?? "모델 미상"} · {run.PromptId} · 최대 {run.MaxTokens} 토큰";
 
     private static EnergySummary Energy(SessionData data, int gpuIndex, IReadOnlyList<CompletedRequest> requests)
     {
@@ -221,6 +228,13 @@ public static class SessionComparer
             if (basePower is double bp && power is double p && Math.Abs(bp - p) >= 1)
             {
                 warnings.Add(new ComparisonWarning("power-limit-different", $"{label}: GPU 전력 제한이 다릅니다 ({bp:0} W → {p:0} W)."));
+            }
+
+            if (baseline.BenchmarkSetupList.Count > 0 && s.BenchmarkSetupList.Count > 0
+                && !baseline.BenchmarkSetupList.Order(StringComparer.Ordinal).SequenceEqual(s.BenchmarkSetupList.Order(StringComparer.Ordinal), StringComparer.Ordinal))
+            {
+                warnings.Add(new ComparisonWarning("benchmark-different",
+                    $"{label}: 측정 요청 조건이 다릅니다 ({string.Join(", ", baseline.BenchmarkSetupList)} → {string.Join(", ", s.BenchmarkSetupList)}). 측정 수치를 직접 비교하기 어렵습니다."));
             }
 
             if (baseline.Session.SampleIntervalMs != s.Session.SampleIntervalMs)
