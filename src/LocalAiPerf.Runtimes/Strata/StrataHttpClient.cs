@@ -128,7 +128,9 @@ public sealed class StrataHttpClient : IDisposable
             {
                 return Fail(path, status, RuntimeErrorCategory.Authentication,
                     _credential is null ? "Strata 서버가 인증을 요구합니다." : "Strata 서버가 API 키를 거부했습니다.",
-                    "Strata의 읽기 전용 텔레메트리 키(STRATA_TELEMETRY_KEY)를 설정의 환경 변수 이름으로 지정한 변수에 넣고 앱을 다시 시작하세요.");
+                    _credential is null
+                        ? "Strata의 텔레메트리 키 또는 API 키를 설정의 환경 변수 이름으로 지정한 변수에 넣고 앱을 다시 시작하세요."
+                        : "키가 이 엔진의 키와 다릅니다. Strata 데스크톱 앱은 모델을 로드할 때마다 엔진 키와 포트를 새로 만들어 외부에 공개하지 않으므로 연결할 수 없습니다. 'strata launch'로 실행한 엔진은 'strata launch --show-key'로 키를 확인할 수 있습니다.");
             }
 
             if (status == 404)

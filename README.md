@@ -49,6 +49,10 @@ GPU·CPU·RAM 사용량과 AI 추론 성능을 실시간으로 보여 주고, SQ
   `/status`는 마지막 답변 일부를 포함할 수 있어 호출하지 않습니다. 자세한 근거는 [docs/STRATA_API.md](docs/STRATA_API.md).
 - Strata에 API 키가 설정되어 있으면 **읽기 전용 텔레메트리 키**를 사용자 환경 변수 `STRATA_TELEMETRY_KEY`(이름은 설정에서 변경 가능)에 넣고 앱을 다시 시작하세요.
   키 값은 이 앱의 설정·DB·로그·내보내기에 저장되지 않습니다. 텔레메트리 키만 있으면 엔진 버전·기본 생성 설정(`/v1/status`, `/props`)은 N/A로 남을 수 있습니다.
+- **Strata 데스크톱 앱으로 모델을 실행한 경우:** 앱이 모델을 로드할 때마다 엔진 포트와 엔진 키를 새로 만들고 공개하지 않습니다
+  (Strata `apps/host/server/native-control.mjs`). 앱의 Serving API 키는 앱 호스트(기본 47831)의 채팅 API용이라 엔진 텔레메트리에 쓸 수 없고,
+  호스트는 `/v1/telemetry`를 내보내지 않습니다. 이 프로그램은 Strata 내부 파일을 읽지 않으므로, 이 경우 Strata 정보는 "인증 필요"로 남고
+  하드웨어 모니터링·기록은 계속됩니다. 추론 정보까지 보려면 **Strata Terminal(`strata launch`)** 로 모델을 실행하세요(포트 고정, 키는 `strata launch --show-key`).
 - 원격 서버는 https만 허용합니다(평문 http는 127.0.0.1/localhost만).
 
 ### 명령줄 옵션 (GUI)

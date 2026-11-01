@@ -38,3 +38,14 @@
 | `schema_version` ≠ 1, JSON 아님, 형식 오류, 알 수 없는 4xx, 알려진 엔드포인트 없음, 다른 서비스 | **API 호환성 오류** | API 호환성 오류 | 30초 |
 | 5xx | 서버 오류 | 서버 오류 | 지수 백오프 |
 | 3xx, TLS 오류 | 설정 오류 | 설정 오류 | 30초 |
+
+## Strata 데스크톱 앱과의 관계 (실기 확인, 2026-11-01)
+
+사용자 PC(Strata 앱 0.2.x)에서 확인한 내용과 소스 근거입니다.
+
+- 엔진(`serve/server.py`)이 `127.0.0.1:18500`에서 `/health`에 `"service": "strata"`, `"api_key": true`로 응답했습니다.
+- 앱의 Serving API 키로 `/v1/telemetry`를 요청하면 401이 나왔습니다. curl로 직접 요청해도 같았습니다.
+- 소스 근거: `apps/host/server/native-control.mjs`의 `loadEngine()`은 모델을 로드할 때마다 `randomBytes(32)`로 엔진 키를, `freePort()`로 포트를 새로 만듭니다.
+  앱 호스트(47831)는 `/v1/models`와 추론만 공개하고 `/v1/telemetry`는 공개하지 않습니다.
+- 결론: 데스크톱 앱으로 실행한 엔진의 텔레메트리는 공개 인터페이스로 읽을 수 없습니다. 내부 파일(`native-instances/*.json`)에서 키를 읽는 것은 비공개 인터페이스라 하지 않습니다.
+  `strata launch`(Terminal)로 실행한 엔진은 문서화된 경로(`--port`, `--show-key`, `STRATA_TELEMETRY_KEY`)로 연결할 수 있습니다.
