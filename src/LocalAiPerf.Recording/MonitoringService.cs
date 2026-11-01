@@ -358,7 +358,11 @@ public sealed class MonitoringService : IAsyncDisposable
 
     private void OnFrame(TelemetryFrame frame)
     {
-        _live.Add(frame);
+        // Charts need rates, work counts and model facts only; request lists stay in the recorder's copy.
+        _live.Add(frame.Runtime is null ? frame : frame with
+        {
+            Runtime = frame.Runtime with { RecentRequests = [], Activity = [], Settings = [] },
+        });
         _recorder?.Enqueue(frame);
         try
         {

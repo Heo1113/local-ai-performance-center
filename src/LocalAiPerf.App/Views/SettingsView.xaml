@@ -128,9 +128,9 @@
             <TextBlock Text="데이터 폴더" Style="{StaticResource FieldLabel}" />
             <TextBlock Text="{Binding DataDirectory}" Style="{StaticResource Value}" VerticalAlignment="Center" MaxWidth="620" />
           </DockPanel>
-          <DataGrid ItemsSource="{Binding DatabaseInfo}" Style="{StaticResource ReadOnlyGrid}">
+          <DataGrid ItemsSource="{Binding DatabaseInfo}" AutoGenerateColumns="False" IsReadOnly="True" HeadersVisibility="Column" GridLinesVisibility="Horizontal" CanUserAddRows="False" CanUserDeleteRows="False" SelectionMode="Single" Background="Transparent" BorderThickness="0" Margin="0,4,0,0">
             <DataGrid.Columns>
-              <DataGridTextColumn Header="항목" Binding="{Binding Name}" Width="90" />
+              <DataGridTextColumn Header="항목" Binding="{Binding Name, Mode=OneWay}" Width="90" />
               <DataGridTemplateColumn Header="값" Width="*">
                 <DataGridTemplateColumn.CellTemplate>
                   <DataTemplate><TextBlock Text="{Binding Value}" Style="{StaticResource WrapCell}" /></DataTemplate>

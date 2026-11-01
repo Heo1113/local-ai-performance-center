@@ -146,10 +146,17 @@ public partial class App : Application
         }
 
         // Finish the session cleanly (end time, WAL checkpoint) before the process exits.
+        // Bounded: if storage hangs, the next start recovers the open session from its last sample.
         e.Cancel = true;
         _closing = true;
-        await ShutdownServicesAsync();
-        Shutdown(_smoke?.ExitCode ?? 0);
+        try
+        {
+            await Task.WhenAny(ShutdownServicesAsync(), Task.Delay(TimeSpan.FromSeconds(10)));
+        }
+        finally
+        {
+            Shutdown(_smoke?.ExitCode ?? 0);
+        }
     }
 
     internal async Task ShutdownServicesAsync()

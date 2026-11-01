@@ -29,11 +29,11 @@
         <Border Style="{StaticResource Card}">
           <StackPanel>
             <TextBlock Text="현재 값" Style="{StaticResource SectionTitle}" />
-            <DataGrid ItemsSource="{Binding CurrentValues}" Style="{StaticResource ReadOnlyGrid}">
+            <DataGrid ItemsSource="{Binding CurrentValues}" AutoGenerateColumns="False" IsReadOnly="True" HeadersVisibility="Column" GridLinesVisibility="Horizontal" CanUserAddRows="False" CanUserDeleteRows="False" SelectionMode="Single" Background="Transparent" BorderThickness="0" Margin="0,4,0,0">
               <DataGrid.Columns>
-                <DataGridTextColumn Header="항목" Binding="{Binding Name}" Width="170" />
-                <DataGridTextColumn Header="값" Binding="{Binding Value}" Width="*" />
-                <DataGridTextColumn Header="출처" Binding="{Binding Origin}" Width="70" />
+                <DataGridTextColumn Header="항목" Binding="{Binding Name, Mode=OneWay}" Width="170" />
+                <DataGridTextColumn Header="값" Binding="{Binding Value, Mode=OneWay}" Width="*" />
+                <DataGridTextColumn Header="출처" Binding="{Binding Origin, Mode=OneWay}" Width="70" />
               </DataGrid.Columns>
             </DataGrid>
           </StackPanel>
@@ -41,9 +41,9 @@
         <Border Grid.Column="1" Style="{StaticResource Card}">
           <StackPanel>
             <TextBlock Text="장치 정보" Style="{StaticResource SectionTitle}" />
-            <DataGrid ItemsSource="{Binding DeviceInfo}" Style="{StaticResource ReadOnlyGrid}">
+            <DataGrid ItemsSource="{Binding DeviceInfo}" AutoGenerateColumns="False" IsReadOnly="True" HeadersVisibility="Column" GridLinesVisibility="Horizontal" CanUserAddRows="False" CanUserDeleteRows="False" SelectionMode="Single" Background="Transparent" BorderThickness="0" Margin="0,4,0,0">
               <DataGrid.Columns>
-                <DataGridTextColumn Header="항목" Binding="{Binding Name}" Width="120" />
+                <DataGridTextColumn Header="항목" Binding="{Binding Name, Mode=OneWay}" Width="120" />
                 <DataGridTemplateColumn Header="값" Width="*">
                   <DataGridTemplateColumn.CellTemplate>
                     <DataTemplate><TextBlock Text="{Binding Value}" Style="{StaticResource WrapCell}" /></DataTemplate>
@@ -58,11 +58,11 @@
       <Border Style="{StaticResource Card}">
         <StackPanel>
           <TextBlock Text="센서 지원 표 (일반 사용자 권한 / 관리자 권한 구분)" Style="{StaticResource SectionTitle}" />
-          <DataGrid ItemsSource="{Binding Sensors}" Style="{StaticResource ReadOnlyGrid}">
+          <DataGrid ItemsSource="{Binding Sensors}" AutoGenerateColumns="False" IsReadOnly="True" HeadersVisibility="Column" GridLinesVisibility="Horizontal" CanUserAddRows="False" CanUserDeleteRows="False" SelectionMode="Single" Background="Transparent" BorderThickness="0" Margin="0,4,0,0">
             <DataGrid.Columns>
-              <DataGridTextColumn Header="항목" Binding="{Binding Name}" Width="190" />
-              <DataGridTextColumn Header="상태" Binding="{Binding Status}" Width="160" />
-              <DataGridTextColumn Header="출처" Binding="{Binding Source}" Width="150" />
+              <DataGridTextColumn Header="항목" Binding="{Binding Name, Mode=OneWay}" Width="190" />
+              <DataGridTextColumn Header="상태" Binding="{Binding Status, Mode=OneWay}" Width="160" />
+              <DataGridTextColumn Header="출처" Binding="{Binding Source, Mode=OneWay}" Width="150" />
               <DataGridCheckBoxColumn Header="관리자 권한 필요" Binding="{Binding RequiresElevation, Mode=OneWay}" Width="120" />
               <DataGridTemplateColumn Header="설명" Width="*">
                 <DataGridTemplateColumn.CellTemplate>

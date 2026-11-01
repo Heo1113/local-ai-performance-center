@@ -7,15 +7,15 @@
     <local:StatusBrushConverter x:Key="StatusBrush" />
     <local:NotEmptyToVisibilityConverter x:Key="NotEmpty" />
     <DataTemplate x:Key="ValueRows">
-      <DataGrid ItemsSource="{Binding}" Style="{StaticResource ReadOnlyGrid}">
+      <DataGrid ItemsSource="{Binding}" AutoGenerateColumns="False" IsReadOnly="True" HeadersVisibility="Column" GridLinesVisibility="Horizontal" CanUserAddRows="False" CanUserDeleteRows="False" SelectionMode="Single" Background="Transparent" BorderThickness="0" Margin="0,4,0,0">
         <DataGrid.Columns>
-          <DataGridTextColumn Header="항목" Binding="{Binding Name}" Width="150" />
+          <DataGridTextColumn Header="항목" Binding="{Binding Name, Mode=OneWay}" Width="150" />
           <DataGridTemplateColumn Header="값" Width="*">
             <DataGridTemplateColumn.CellTemplate>
               <DataTemplate><TextBlock Text="{Binding Value}" Style="{StaticResource WrapCell}" /></DataTemplate>
             </DataGridTemplateColumn.CellTemplate>
           </DataGridTemplateColumn>
-          <DataGridTextColumn Header="출처" Binding="{Binding Origin}" Width="70" />
+          <DataGridTextColumn Header="출처" Binding="{Binding Origin, Mode=OneWay}" Width="70" />
           <DataGridTemplateColumn Header="비고" Width="*">
             <DataGridTemplateColumn.CellTemplate>
               <DataTemplate><TextBlock Text="{Binding Note}" Style="{StaticResource WrapCell}" Foreground="{StaticResource TextMutedBrush}" /></DataTemplate>
@@ -94,13 +94,13 @@
         <Border Grid.Column="1" Style="{StaticResource Card}">
           <StackPanel>
             <TextBlock Text="슬롯별 컨텍스트" Style="{StaticResource SectionTitle}" />
-            <DataGrid ItemsSource="{Binding Slots}" Style="{StaticResource ReadOnlyGrid}">
+            <DataGrid ItemsSource="{Binding Slots}" AutoGenerateColumns="False" IsReadOnly="True" HeadersVisibility="Column" GridLinesVisibility="Horizontal" CanUserAddRows="False" CanUserDeleteRows="False" SelectionMode="Single" Background="Transparent" BorderThickness="0" Margin="0,4,0,0">
               <DataGrid.Columns>
-                <DataGridTextColumn Header="슬롯" Binding="{Binding Slot}" Width="50" />
-                <DataGridTextColumn Header="상태" Binding="{Binding State}" Width="90" />
-                <DataGridTextColumn Header="보유 토큰" Binding="{Binding Held}" Width="100" />
-                <DataGridTextColumn Header="컨텍스트 사용 (계산값)" Binding="{Binding Fill}" Width="*" />
-                <DataGridTextColumn Header="tok/s" Binding="{Binding TokS}" Width="70" />
+                <DataGridTextColumn Header="슬롯" Binding="{Binding Slot, Mode=OneWay}" Width="50" />
+                <DataGridTextColumn Header="상태" Binding="{Binding State, Mode=OneWay}" Width="90" />
+                <DataGridTextColumn Header="보유 토큰" Binding="{Binding Held, Mode=OneWay}" Width="100" />
+                <DataGridTextColumn Header="컨텍스트 사용 (계산값)" Binding="{Binding Fill, Mode=OneWay}" Width="*" />
+                <DataGridTextColumn Header="tok/s" Binding="{Binding TokS, Mode=OneWay}" Width="70" />
               </DataGrid.Columns>
             </DataGrid>
           </StackPanel>
@@ -110,18 +110,18 @@
       <Border Style="{StaticResource Card}">
         <StackPanel>
           <TextBlock Text="최근 완료 요청 (내용 없이 수치만)" Style="{StaticResource SectionTitle}" />
-          <DataGrid ItemsSource="{Binding Recent}" Style="{StaticResource ReadOnlyGrid}" MaxHeight="320">
+          <DataGrid ItemsSource="{Binding Recent}" AutoGenerateColumns="False" IsReadOnly="True" HeadersVisibility="Column" GridLinesVisibility="Horizontal" CanUserAddRows="False" CanUserDeleteRows="False" SelectionMode="Single" Background="Transparent" BorderThickness="0" Margin="0,4,0,0" MaxHeight="320">
             <DataGrid.Columns>
-              <DataGridTextColumn Header="시작" Binding="{Binding Time}" Width="150" />
-              <DataGridTextColumn Header="처리 시간" Binding="{Binding Duration}" Width="80" />
-              <DataGridTextColumn Header="종료" Binding="{Binding Finish}" Width="70" />
-              <DataGridTextColumn Header="프롬프트 토큰" Binding="{Binding PromptTokens}" Width="100" />
-              <DataGridTextColumn Header="캐시 재사용" Binding="{Binding Reused}" Width="90" />
-              <DataGridTextColumn Header="출력 토큰" Binding="{Binding OutputTokens}" Width="80" />
-              <DataGridTextColumn Header="프롬프트 ms" Binding="{Binding PrefillMs}" Width="90" />
-              <DataGridTextColumn Header="디코드 ms" Binding="{Binding DecodeMs}" Width="90" />
-              <DataGridTextColumn Header="디코드 tok/s (계산값)" Binding="{Binding DecodeTokS}" Width="140" />
-              <DataGridTextColumn Header="첫 토큰 (엔진 기준)" Binding="{Binding FirstToken}" Width="*" />
+              <DataGridTextColumn Header="시작" Binding="{Binding Time, Mode=OneWay}" Width="150" />
+              <DataGridTextColumn Header="처리 시간" Binding="{Binding Duration, Mode=OneWay}" Width="80" />
+              <DataGridTextColumn Header="종료" Binding="{Binding Finish, Mode=OneWay}" Width="70" />
+              <DataGridTextColumn Header="프롬프트 토큰" Binding="{Binding PromptTokens, Mode=OneWay}" Width="100" />
+              <DataGridTextColumn Header="캐시 재사용" Binding="{Binding Reused, Mode=OneWay}" Width="90" />
+              <DataGridTextColumn Header="출력 토큰" Binding="{Binding OutputTokens, Mode=OneWay}" Width="80" />
+              <DataGridTextColumn Header="프롬프트 ms" Binding="{Binding PrefillMs, Mode=OneWay}" Width="90" />
+              <DataGridTextColumn Header="디코드 ms" Binding="{Binding DecodeMs, Mode=OneWay}" Width="90" />
+              <DataGridTextColumn Header="디코드 tok/s (계산값)" Binding="{Binding DecodeTokS, Mode=OneWay}" Width="140" />
+              <DataGridTextColumn Header="첫 토큰 (엔진 기준)" Binding="{Binding FirstToken, Mode=OneWay}" Width="*" />
             </DataGrid.Columns>
           </DataGrid>
         </StackPanel>
@@ -130,12 +130,12 @@
       <Border Style="{StaticResource Card}">
         <StackPanel>
           <TextBlock Text="요청 활동 (오류·시간 초과 포함, 익명 요청 ID)" Style="{StaticResource SectionTitle}" />
-          <DataGrid ItemsSource="{Binding Activity}" Style="{StaticResource ReadOnlyGrid}" MaxHeight="260">
+          <DataGrid ItemsSource="{Binding Activity}" AutoGenerateColumns="False" IsReadOnly="True" HeadersVisibility="Column" GridLinesVisibility="Horizontal" CanUserAddRows="False" CanUserDeleteRows="False" SelectionMode="Single" Background="Transparent" BorderThickness="0" Margin="0,4,0,0" MaxHeight="260">
             <DataGrid.Columns>
-              <DataGridTextColumn Header="시각" Binding="{Binding Time}" Width="160" />
-              <DataGridTextColumn Header="요청 ID" Binding="{Binding RequestId}" Width="130" />
-              <DataGridTextColumn Header="이벤트" Binding="{Binding Event}" Width="120" />
-              <DataGridTextColumn Header="결과" Binding="{Binding Outcome}" Width="*" />
+              <DataGridTextColumn Header="시각" Binding="{Binding Time, Mode=OneWay}" Width="160" />
+              <DataGridTextColumn Header="요청 ID" Binding="{Binding RequestId, Mode=OneWay}" Width="130" />
+              <DataGridTextColumn Header="이벤트" Binding="{Binding Event, Mode=OneWay}" Width="120" />
+              <DataGridTextColumn Header="결과" Binding="{Binding Outcome, Mode=OneWay}" Width="*" />
             </DataGrid.Columns>
           </DataGrid>
         </StackPanel>

@@ -83,7 +83,7 @@
           <Border Style="{StaticResource Card}">
             <StackPanel>
               <TextBlock Text="지표별 비교 (평균 (최소~최대, 표본 수) · 기준 대비 변화율)" Style="{StaticResource SectionTitle}" />
-              <DataGrid x:Name="RowsGrid" ItemsSource="{Binding Rows}" Style="{StaticResource ReadOnlyGrid}" />
+              <DataGrid x:Name="RowsGrid" ItemsSource="{Binding Rows}" AutoGenerateColumns="False" IsReadOnly="True" HeadersVisibility="Column" GridLinesVisibility="Horizontal" CanUserAddRows="False" CanUserDeleteRows="False" SelectionMode="Single" Background="Transparent" BorderThickness="0" Margin="0,4,0,0" />
               <TextBlock Style="{StaticResource Caption}" Margin="0,6,0,0"
                          Text="▲ 개선 / ▼ 저하는 지표의 좋은 방향(예: tok/s는 높을수록, 온도는 낮을수록)을 기준으로 한 계산값이며 ±1% 미만은 표시하지 않습니다. 작업 부하가 다르면 차이가 클 수 있습니다." />
             </StackPanel>
@@ -102,12 +102,12 @@
           <Border Style="{StaticResource Card}">
             <StackPanel>
               <TextBlock Text="세션별 성능 저하 후보 (함께 관측된 항목은 원인이 아님)" Style="{StaticResource SectionTitle}" />
-              <DataGrid ItemsSource="{Binding Degradations}" Style="{StaticResource ReadOnlyGrid}">
+              <DataGrid ItemsSource="{Binding Degradations}" AutoGenerateColumns="False" IsReadOnly="True" HeadersVisibility="Column" GridLinesVisibility="Horizontal" CanUserAddRows="False" CanUserDeleteRows="False" SelectionMode="Single" Background="Transparent" BorderThickness="0" Margin="0,4,0,0">
                 <DataGrid.Columns>
-                  <DataGridTextColumn Header="세션 · 지표" Binding="{Binding Metric}" Width="200" />
-                  <DataGridTextColumn Header="시작" Binding="{Binding Start}" Width="150" />
-                  <DataGridTextColumn Header="길이" Binding="{Binding Duration}" Width="80" />
-                  <DataGridTextColumn Header="하락" Binding="{Binding Drop}" Width="60" />
+                  <DataGridTextColumn Header="세션 · 지표" Binding="{Binding Metric, Mode=OneWay}" Width="200" />
+                  <DataGridTextColumn Header="시작" Binding="{Binding Start, Mode=OneWay}" Width="150" />
+                  <DataGridTextColumn Header="길이" Binding="{Binding Duration, Mode=OneWay}" Width="80" />
+                  <DataGridTextColumn Header="하락" Binding="{Binding Drop, Mode=OneWay}" Width="60" />
                   <DataGridTemplateColumn Header="함께 관측됨" Width="*">
                     <DataGridTemplateColumn.CellTemplate>
                       <DataTemplate><TextBlock Text="{Binding Observations}" Style="{StaticResource WrapCell}" /></DataTemplate>
