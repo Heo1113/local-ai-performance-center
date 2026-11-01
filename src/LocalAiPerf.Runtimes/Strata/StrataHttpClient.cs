@@ -48,7 +48,9 @@ public sealed class StrataHttpClient : IDisposable
             {
                 AllowAutoRedirect = false,
                 UseCookies = false,
-                ConnectTimeout = timeout,
+                // The TCP connect gets its own, shorter deadline. Windows retries a refused connect for about two
+                // seconds, so without this a stopped Strata would look like a server that accepted and then hung.
+                ConnectCallback = (context, ct) => ConnectAsync(context.DnsEndPoint, ConnectDeadline(timeout), ct),
                 PooledConnectionLifetime = TimeSpan.FromMinutes(2),
                 // A local server must not be reached through a system proxy.
                 UseProxy = !Core.Settings.EndpointValidator.IsLoopback(baseUri),
@@ -62,6 +64,38 @@ public sealed class StrataHttpClient : IDisposable
     }
 
     public Uri BaseUri { get; }
+
+    /// <summary>Connect deadline: 80 % of the request timeout so it always fires before the request deadline.</summary>
+    internal static TimeSpan ConnectDeadline(TimeSpan requestTimeout) => TimeSpan.FromTicks(requestTimeout.Ticks * 4 / 5);
+
+    internal static ValueTask<Stream> ConnectAsync(DnsEndPoint endPoint, TimeSpan deadline, CancellationToken cancellationToken)
+        => ConnectAsync(endPoint, deadline, (socket, ep, ct) => socket.ConnectAsync(ep, ct), cancellationToken);
+
+    /// <param name="connect">The socket connect step (replaceable in tests to simulate a connect that never completes).</param>
+    internal static async ValueTask<Stream> ConnectAsync(DnsEndPoint endPoint, TimeSpan deadline,
+        Func<Socket, DnsEndPoint, CancellationToken, ValueTask> connect, CancellationToken cancellationToken)
+    {
+        var socket = new Socket(SocketType.Stream, ProtocolType.Tcp) { NoDelay = true };
+        using var connectCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        connectCts.CancelAfter(deadline);
+        try
+        {
+            await connect(socket, endPoint, connectCts.Token).ConfigureAwait(false);
+            return new NetworkStream(socket, ownsSocket: true);
+        }
+        catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
+        {
+            socket.Dispose();
+            throw new HttpRequestException(HttpRequestError.ConnectionError,
+                $"TCP connection to {endPoint.Host}:{endPoint.Port} was not established within {deadline.TotalSeconds:0.#} s.",
+                new SocketException((int)SocketError.TimedOut));
+        }
+        catch
+        {
+            socket.Dispose();
+            throw;
+        }
+    }
     public bool HasCredential => _credential is not null;
 
     internal async Task<StrataResponse> GetAsync(string path, bool sendCredential, CancellationToken cancellationToken)
@@ -169,6 +203,8 @@ public sealed class StrataHttpClient : IDisposable
                 "HTTP 응답 형식이 아닙니다. 이 포트에서 다른 프로그램이 응답하고 있을 수 있습니다.", null),
             _ when socket is SocketError.ConnectionRefused => Fail(path, null, RuntimeErrorCategory.Connection,
                 "Strata 서버에 연결할 수 없습니다 (연결 거부).", "Strata가 실행 중인지, 주소와 포트(기본 8080)가 맞는지 확인하세요."),
+            _ when socket is SocketError.TimedOut => Fail(path, null, RuntimeErrorCategory.Connection,
+                "Strata 서버에 연결할 수 없습니다 (연결이 수립되지 않음).", "Strata가 실행 중인지, 주소와 포트(기본 8080)가 맞는지 확인하세요."),
             _ => Fail(path, null, RuntimeErrorCategory.Connection,
                 $"Strata 서버와 통신하지 못했습니다 ({ex.HttpRequestError}).", "Strata가 실행 중인지 확인하세요."),
         };

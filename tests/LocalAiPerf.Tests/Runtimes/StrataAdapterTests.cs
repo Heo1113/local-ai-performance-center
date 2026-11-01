@@ -222,3 +222,22 @@ public class StrataAdapterTests
         Assert.Throws<ArgumentException>(() => Adapter("http://192.168.0.10:8080"));
     }
 }
+
+public class StrataConnectTests
+{
+    [Fact]
+    public async Task A_connect_that_never_completes_is_a_connection_error_not_a_server_timeout()
+    {
+        // Windows retries a refused loopback connect for about two seconds; simulate a connect that hangs.
+        var ex = await Assert.ThrowsAsync<HttpRequestException>(async () => await StrataHttpClient.ConnectAsync(
+            new System.Net.DnsEndPoint("127.0.0.1", 9), TimeSpan.FromMilliseconds(100),
+            (_, _, ct) => new ValueTask(Task.Delay(Timeout.Infinite, ct)), TestContext.Current.CancellationToken));
+
+        Assert.Equal(HttpRequestError.ConnectionError, ex.HttpRequestError);
+        Assert.Equal(System.Net.Sockets.SocketError.TimedOut, Assert.IsType<System.Net.Sockets.SocketException>(ex.InnerException).SocketErrorCode);
+    }
+
+    [Fact]
+    public void Connect_deadline_fires_before_the_request_deadline()
+        => Assert.True(StrataHttpClient.ConnectDeadline(TimeSpan.FromSeconds(2)) < TimeSpan.FromSeconds(2));
+}

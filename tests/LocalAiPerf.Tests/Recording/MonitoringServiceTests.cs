@@ -61,7 +61,10 @@ public class MonitoringServiceTests
 
         await using var service = new MonitoringService(new AppPaths(dir.Path, false), settings, new MonitoringOptions { UseMockSensors = true });
         await service.StartAsync();
-        await Task.Delay(TimeSpan.FromSeconds(2), TestContext.Current.CancellationToken);
+        for (var i = 0; i < 100 && (service.LatestRuntime is null || service.Live.Latest is null); i++)
+        {
+            await Task.Delay(100, TestContext.Current.CancellationToken); // a refused connect takes ~2 s on Windows
+        }
 
         Assert.NotNull(service.Live.Latest);
         Assert.NotEmpty(service.Live.Latest!.Hardware.Gpus);
