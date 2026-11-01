@@ -38,7 +38,3 @@ public static class SessionText
 
     public static string Kind(SessionInfo s) => s.Kind == SessionKind.Manual ? "수동" : "자동";
 }
-
-/// <summary>One measurement run. Client-side values are measured by this app; engine values come from the response's timings.</summary>
-public sealed record BenchmarkRow(string Time, string Model, string Result, string FirstToken, string ClientDecode, string EngineDecode,
-    string EnginePrompt, string Tokens, string Total, bool IsError);

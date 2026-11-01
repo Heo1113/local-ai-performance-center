@@ -5,7 +5,6 @@ using LocalAiPerf.Core.Runtime;
 using LocalAiPerf.Core.Sessions;
 using LocalAiPerf.Core.Settings;
 using LocalAiPerf.Runtimes;
-using LocalAiPerf.Runtimes.Benchmark;
 using LocalAiPerf.Storage;
 using LocalAiPerf.Telemetry;
 
@@ -36,7 +35,6 @@ public sealed class MonitoringService : IAsyncDisposable
     private readonly IAppLogger _log;
     private readonly TimeProvider _time;
     private readonly SemaphoreSlim _gate = new(1, 1);
-    private readonly SemaphoreSlim _benchmarkGate = new(1, 1);
     private readonly List<string> _notices = [];
     private readonly LiveBuffer _live;
     private HardwareMonitor? _hardware;
@@ -46,7 +44,6 @@ public sealed class MonitoringService : IAsyncDisposable
     private TelemetryStore? _store;
     private CancellationTokenSource? _maintenanceCts;
     private Task? _maintenance;
-    private Task? _autoBenchmark;
     private bool _started;
 
     public MonitoringService(AppPaths paths, AppSettings settings, MonitoringOptions? options = null, IAppLogger? log = null, TimeProvider? time = null)
@@ -104,7 +101,6 @@ public sealed class MonitoringService : IAsyncDisposable
             _started = true;
             _maintenanceCts = new CancellationTokenSource();
             _maintenance = Task.Run(() => MaintenanceLoopAsync(_maintenanceCts.Token));
-            _autoBenchmark = Task.Run(() => AutoBenchmarkLoopAsync(_maintenanceCts.Token));
             if (_store is not null && (_options.AutoRecord ?? Settings.Recording.AutoRecordOnStartup))
             {
                 await _recorder!.StartAsync(null, SessionKind.Auto).ConfigureAwait(false);
@@ -173,127 +169,6 @@ public sealed class MonitoringService : IAsyncDisposable
         }
 
         RaiseStateChanged();
-    }
-
-    public bool IsBenchmarkRunning => _benchmarkGate.CurrentCount == 0;
-
-    private BenchmarkResult? _lastBenchmark;
-    private bool _lastBenchmarkLoaded;
-
-    /// <summary>The newest measurement run (from this run of the app, or the newest stored one).</summary>
-    public BenchmarkResult? LastBenchmark
-    {
-        get
-        {
-            if (!_lastBenchmarkLoaded && _store is not null)
-            {
-                _lastBenchmarkLoaded = true;
-                _lastBenchmark ??= RecentBenchmarks(1).FirstOrDefault();
-            }
-
-            return _lastBenchmark;
-        }
-    }
-
-    /// <summary>Raised after each measurement run (success or failure), on a background thread.</summary>
-    public event Action<BenchmarkResult>? BenchmarkCompleted;
-
-    /// <summary>
-    /// Opt-in measurement: sends the fixed test prompt <paramref name="repeat"/> times through the configured chat API and
-    /// stores the numbers (attached to the session being recorded, if any). Only runs when the user asks for it.
-    /// </summary>
-    public async Task<BenchmarkBatch> RunBenchmarkAsync(int? repeat = null, IProgress<string>? progress = null, CancellationToken cancellationToken = default)
-    {
-        if (!await _benchmarkGate.WaitAsync(0, cancellationToken).ConfigureAwait(false))
-        {
-            return new BenchmarkBatch([], new RuntimeError(RuntimeErrorCategory.Configuration, "이미 측정 중입니다."), false);
-        }
-
-        RaiseStateChanged();
-        try
-        {
-            var settings = Settings.Benchmark;
-            var count = Math.Clamp(repeat ?? settings.Repeat, 1, 10);
-            using var client = ChatBenchmarkClient.FromSettings(settings);
-            progress?.Report("모델 확인 중");
-            var (model, error) = await client.ResolveModelAsync(cancellationToken).ConfigureAwait(false);
-            if (model is null)
-            {
-                _log.Warn("benchmark", $"측정 요청을 보내지 못했습니다: {error?.Message}");
-                return new BenchmarkBatch([], error, false);
-            }
-
-            var runs = new List<BenchmarkResult>();
-            var stored = _store is not null;
-            for (var i = 0; i < count; i++)
-            {
-                progress?.Report($"측정 {i + 1}/{count} 실행 중 ({model})");
-                var run = await client.RunOnceAsync(model, _time.GetUtcNow(), cancellationToken).ConfigureAwait(false);
-                runs.Add(run);
-                stored &= StoreBenchmark(run);
-                _lastBenchmark = run;
-                BenchmarkCompleted?.Invoke(run);
-                if (!run.Success && run.ErrorCategory is RuntimeErrorCategory.Connection or RuntimeErrorCategory.Authentication or RuntimeErrorCategory.Compatibility)
-                {
-                    break; // the next run would fail the same way
-                }
-            }
-
-            var ok = runs.Count(r => r.Success);
-            _log.Info("benchmark", $"측정 요청 {runs.Count}회 (성공 {ok}회), 모델 {model}");
-            TryWriteEvent(new EventRecord(_recorder?.ActiveSession?.Id, _time.GetUtcNow(), ok == runs.Count ? EventSeverity.Info : EventSeverity.Warning,
-                EventCategories.Benchmark, $"측정 요청 {runs.Count}회 실행 (성공 {ok}회), 모델 {model}, 최대 {settings.MaxTokens} 토큰"));
-            return new BenchmarkBatch(runs, null, stored);
-        }
-        catch (ArgumentException ex)
-        {
-            return new BenchmarkBatch([], new RuntimeError(RuntimeErrorCategory.Configuration, ex.Message), false);
-        }
-        finally
-        {
-            _benchmarkGate.Release();
-            RaiseStateChanged();
-        }
-    }
-
-    /// <summary>Stored measurement runs: one session's, or the newest across all sessions.</summary>
-    public IReadOnlyList<BenchmarkResult> RecentBenchmarks(int limit = 50)
-    {
-        try
-        {
-            return _store?.ListBenchmarks(null, limit) ?? [];
-        }
-        catch (Exception ex) when (ex is Microsoft.Data.Sqlite.SqliteException or ObjectDisposedException or InvalidOperationException)
-        {
-            _log.Warn("benchmark", $"측정 기록을 읽지 못했습니다: {ex.Message}");
-            return [];
-        }
-    }
-
-    private bool StoreBenchmark(BenchmarkResult run)
-    {
-        try
-        {
-            _store?.WriteBenchmark(_recorder?.ActiveSession?.Id, run);
-            return _store is not null;
-        }
-        catch (Exception ex) when (ex is Microsoft.Data.Sqlite.SqliteException or ObjectDisposedException or IOException)
-        {
-            _log.Error("benchmark", $"측정 결과를 저장하지 못했습니다: {ex.Message}");
-            return false;
-        }
-    }
-
-    private void TryWriteEvent(EventRecord record)
-    {
-        try
-        {
-            _store?.WriteEvent(record);
-        }
-        catch (Exception ex) when (ex is Microsoft.Data.Sqlite.SqliteException or ObjectDisposedException or IOException)
-        {
-            _log.Warn("benchmark", $"이벤트를 저장하지 못했습니다: {ex.Message}");
-        }
     }
 
     public async Task<RetentionResult?> ApplyRetentionNowAsync()
@@ -373,7 +248,6 @@ public sealed class MonitoringService : IAsyncDisposable
                 try
                 {
                     await (_maintenance ?? Task.CompletedTask).ConfigureAwait(false);
-                    await (_autoBenchmark ?? Task.CompletedTask).ConfigureAwait(false);
                 }
                 catch (OperationCanceledException)
                 {
@@ -397,7 +271,6 @@ public sealed class MonitoringService : IAsyncDisposable
     {
         await StopAsync().ConfigureAwait(false);
         _gate.Dispose();
-        _benchmarkGate.Dispose();
     }
 
     private void OpenStore()
@@ -499,96 +372,6 @@ public sealed class MonitoringService : IAsyncDisposable
         {
             _log.Error("monitor", "프레임 구독자 예외", ex);
         }
-    }
-
-    private static readonly TimeSpan AutoBenchmarkTick = TimeSpan.FromSeconds(30);
-    private static readonly TimeSpan AutoBenchmarkFirstDelay = TimeSpan.FromMinutes(1);
-    private static readonly TimeSpan GpuBusyWindow = TimeSpan.FromSeconds(15);
-
-    /// <summary>When the next automatic run is due (null while automatic measurement is off).</summary>
-    public DateTimeOffset? NextAutoBenchmarkAt { get; private set; }
-
-    /// <summary>Why the last due automatic run was postponed, if it was.</summary>
-    public string? AutoBenchmarkDeferral { get; private set; }
-
-    /// <summary>
-    /// Automatic measurement (off by default). Sends one run every AutoIntervalMinutes; a due run waits while the GPU
-    /// is busy so it does not slow down the user's own work.
-    /// </summary>
-    private async Task AutoBenchmarkLoopAsync(CancellationToken ct)
-    {
-        var startedAt = _time.GetUtcNow();
-        DateTimeOffset? lastRun = null;
-        while (!ct.IsCancellationRequested)
-        {
-            try
-            {
-                await Task.Delay(AutoBenchmarkTick, _time, ct).ConfigureAwait(false);
-            }
-            catch (OperationCanceledException)
-            {
-                return;
-            }
-
-            var minutes = Settings.Benchmark.AutoIntervalMinutes;
-            if (minutes <= 0)
-            {
-                NextAutoBenchmarkAt = null;
-                AutoBenchmarkDeferral = null;
-                continue;
-            }
-
-            var now = _time.GetUtcNow();
-            var due = lastRun is DateTimeOffset last ? last + TimeSpan.FromMinutes(minutes) : startedAt + AutoBenchmarkFirstDelay;
-            NextAutoBenchmarkAt = due;
-            if (now < due || IsBenchmarkRunning)
-            {
-                continue;
-            }
-
-            if (GpuBusy(now) is double util)
-            {
-                AutoBenchmarkDeferral = $"GPU 사용 중({util:0}% ≥ {Settings.Benchmark.AutoSkipGpuUtilPercent}%)이라 자동 측정을 미뤘습니다.";
-                RaiseStateChanged();
-                continue;
-            }
-
-            AutoBenchmarkDeferral = null;
-            lastRun = now;
-            try
-            {
-                var batch = await RunBenchmarkAsync(1, null, ct).ConfigureAwait(false);
-                if (batch.Error is { } error)
-                {
-                    _log.Warn("benchmark", $"자동 측정 실패: {error.Message}");
-                }
-            }
-            catch (OperationCanceledException)
-            {
-                return;
-            }
-            catch (Exception ex)
-            {
-                _log.Error("benchmark", "자동 측정 중 오류", ex);
-            }
-
-            NextAutoBenchmarkAt = lastRun + TimeSpan.FromMinutes(Settings.Benchmark.AutoIntervalMinutes);
-            RaiseStateChanged();
-        }
-    }
-
-    /// <summary>The highest GPU utilization of the last seconds when it reaches the threshold, otherwise null.</summary>
-    internal double? GpuBusy(DateTimeOffset now)
-    {
-        var threshold = Settings.Benchmark.AutoSkipGpuUtilPercent;
-        var peak = _live.Snapshot()
-            .Where(f => now - f.Timestamp <= GpuBusyWindow)
-            .SelectMany(f => f.Hardware.Gpus)
-            .Select(g => g.UtilizationPercent)
-            .Where(u => u is not null)
-            .DefaultIfEmpty(null)
-            .Max();
-        return peak is double p && p >= threshold ? p : null;
     }
 
     private async Task MaintenanceLoopAsync(CancellationToken ct)

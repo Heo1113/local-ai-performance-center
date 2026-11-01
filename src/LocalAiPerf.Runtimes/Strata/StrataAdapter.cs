@@ -382,6 +382,7 @@ public sealed class StrataAdapter : IAiRuntimeAdapter
         StrataProps? props = null;
         StrataModels? models = null;
         string? statusNote = null;
+        var restricted = false;
         try
         {
             using (var r = await _client.GetAsync(StrataEndpoints.Health, sendCredential: false, ct).ConfigureAwait(false))
@@ -400,21 +401,23 @@ public sealed class StrataAdapter : IAiRuntimeAdapter
                 }
                 else if (r.Error?.Category == RuntimeErrorCategory.Authentication)
                 {
-                    statusNote = "Strata API 키 권한이 필요합니다 (읽기 전용 텔레메트리 키로는 /v1/status, /props를 조회할 수 없습니다).";
+                    statusNote = "읽기 전용 텔레메트리 키로는 Strata가 제공하지 않음";
+                    restricted = true;
                 }
             }
 
-            using (var r = await _client.GetAsync(StrataEndpoints.Props, sendCredential: true, ct).ConfigureAwait(false))
+            // /props and /v1/models need the same permission as /v1/status: do not ask again when it was refused.
+            using (var r = restricted ? null : await _client.GetAsync(StrataEndpoints.Props, sendCredential: true, ct).ConfigureAwait(false))
             {
-                if (r.IsSuccess && r.Json!.RootElement.ValueKind == JsonValueKind.Object)
+                if (r is not null && r.IsSuccess && r.Json!.RootElement.ValueKind == JsonValueKind.Object)
                 {
                     props = StrataParser.ParseProps(r.Json.RootElement);
                 }
             }
 
-            using (var r = await _client.GetAsync(StrataEndpoints.Models, sendCredential: true, ct).ConfigureAwait(false))
+            using (var r = restricted ? null : await _client.GetAsync(StrataEndpoints.Models, sendCredential: true, ct).ConfigureAwait(false))
             {
-                if (r.IsSuccess && r.Json!.RootElement.ValueKind == JsonValueKind.Object)
+                if (r is not null && r.IsSuccess && r.Json!.RootElement.ValueKind == JsonValueKind.Object)
                 {
                     models = StrataParser.ParseModels(r.Json.RootElement);
                 }
@@ -431,7 +434,7 @@ public sealed class StrataAdapter : IAiRuntimeAdapter
 
         lock (_metaGate)
         {
-            _metadata = new StrataMetadata(health, status, props, models, statusNote);
+            _metadata = new StrataMetadata(health, status, props, models, statusNote, restricted);
         }
     }
 
@@ -473,6 +476,7 @@ public sealed class StrataAdapter : IAiRuntimeAdapter
             TelemetrySource = t.Source,
             SchemaVersion = t.Source == "server-v1" ? 1 : null,
             ApiKeyConfigured = meta.Health?.ApiKey,
+            MetadataRestricted = meta.Restricted,
         };
 
         var model = new RuntimeModelInfo
@@ -537,7 +541,8 @@ public sealed class StrataAdapter : IAiRuntimeAdapter
         }
     }
 
-    private sealed record StrataMetadata(StrataHealth? Health, StrataStatus? Status, StrataProps? Props, StrataModels? Models, string? StatusNote)
+    private sealed record StrataMetadata(StrataHealth? Health, StrataStatus? Status, StrataProps? Props, StrataModels? Models, string? StatusNote,
+        bool Restricted = false)
     {
         public static StrataMetadata Empty { get; } = new(null, null, null, null, null);
     }

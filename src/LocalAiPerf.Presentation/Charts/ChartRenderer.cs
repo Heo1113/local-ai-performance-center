@@ -149,6 +149,11 @@ public static class ChartRenderer
             {
                 plot.Legend.FontName = Font;
             }
+            else
+            {
+                // No known Hangul font: let ScottPlot pick, per legend item, a font that can draw the text.
+                plot.Legend.SetBestFontOnEachRender = true;
+            }
         }
         else
         {
@@ -156,6 +161,11 @@ public static class ChartRenderer
         }
 
         ApplyStyle(plot); // axes created above (date axis) get the same ink
+        if (Font is null)
+        {
+            plot.Font.Automatic(); // fallback: choose fonts from the text of each label
+        }
+
         return true;
     }
 

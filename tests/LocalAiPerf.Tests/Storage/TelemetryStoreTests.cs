@@ -253,4 +253,44 @@ public class TelemetryStoreTests
         Assert.Equal("ok", store.IntegrityCheck());
         Assert.Equal(2, store.GetStats().Sessions);
     }
+
+    [Fact]
+    public void Databases_from_the_build_with_measurement_runs_still_open_and_keep_their_rows()
+    {
+        using var dir = new TempDir();
+        var path = dir.File("lapc.db");
+        long sessionId;
+        using (var store = TelemetryStore.Open(path))
+        {
+            sessionId = store.StartSession(Start(T0)).Id;
+        }
+
+        using (var connection = new SqliteConnection($"Data Source={path};Pooling=False"))
+        {
+            connection.Open();
+            using var command = connection.CreateCommand();
+            command.CommandText = $"""
+                CREATE TABLE benchmark_runs (id INTEGER PRIMARY KEY, session_id INTEGER REFERENCES sessions(id) ON DELETE CASCADE, t_ms INTEGER NOT NULL);
+                INSERT INTO benchmark_runs (session_id, t_ms) VALUES ({sessionId}, 1);
+                PRAGMA user_version = 2;
+                """;
+            command.ExecuteNonQuery();
+        }
+
+        using (var store = TelemetryStore.Open(path))
+        {
+            Assert.NotNull(store.GetSession(sessionId));
+        }
+
+        using (var connection = new SqliteConnection($"Data Source={path};Pooling=False;Mode=ReadOnly"))
+        {
+            connection.Open();
+            using var command = connection.CreateCommand();
+            command.CommandText = "SELECT COUNT(*) FROM benchmark_runs;";
+            Assert.Equal(1L, (long)command.ExecuteScalar()!);
+        }
+
+        Assert.Equal(2, TelemetryStore.ValidateBackup(path).SchemaVersion);
+    }
 }
+

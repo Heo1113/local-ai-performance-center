@@ -17,7 +17,7 @@
 ## 사용하지 않는 것
 
 - `GET /status`: 문서와 코드(`serve/server.py`, issue #212 주석)에 따르면 마지막 답변의 끝부분을 포함할 수 있어 호출하지 않습니다.
-- 텔레메트리 수집에서는 `POST` 전체(추론, `/slots`, `/v1/load`, `/v1/unload`, `/v1/vram` 등), 관리 브리지(`python -m strata_control.management`), Strata 파일·설정·프로세스.
+- `POST` 전체(추론, `/slots`, `/v1/load`, `/v1/unload`, `/v1/vram` 등), 관리 브리지(`python -m strata_control.management`), Strata 파일·설정·프로세스.
 - `/props`의 `chat_template`, 모델 파일 전체 경로(사용자 이름이 들어갈 수 있음).
 
 ## 클라이언트 규칙 (Strata 자체 모니터 클라이언트 `strata_cli/client.py`와 동일)
@@ -50,29 +50,13 @@
   데스크톱 앱은 엔진을 띄울 때 환경 변수를 복사해 넘깁니다(`control-runtime.mjs`의 `sourceServerEnvironment`/`controlEnvironment`,
   `strata_control/runtime.py`의 `os.environ.copy()`; `STRATA_API_KEY`만 제거).
 - **사용자 PC에서 확인함:** 사용자 환경 변수 `STRATA_TELEMETRY_KEY`를 설정하고 Strata 앱을 다시 시작한 뒤, 이 프로그램이 같은 키로
-  `127.0.0.1:18500`의 `/v1/telemetry`에 연결되었습니다(상태 "연결됨", 모델 ID·컨텍스트 표시). 엔진 버전·`/props`는 텔레메트리 키 권한 밖이라 N/A입니다.
+  `127.0.0.1:18500`의 `/v1/telemetry`에 연결되었습니다(상태 "연결됨", 모델 ID·컨텍스트 표시). 엔진 버전·`/props`·`/v1/models`는 텔레메트리 키 권한 밖이라 "제공 안 됨"으로 표시합니다(`/v1/status`가 401이면 나머지는 묻지 않음).
 - 포트는 로드마다 바뀔 수 있어, 포트 자동 찾기가 18500~18520에서 `/health`(인증 없음, `service: "strata"`)로 엔진을 찾습니다.
   여러 엔진이 있으면 로드된 엔진 중 텔레메트리 키를 받아 주는 엔진을 고릅니다. 탐색 중에는 키를 보내지 않습니다.
 - 내부 파일(`native-instances/*.json` 등)은 읽지 않습니다.
 
 > 정정: 이 문서의 이전 판은 "데스크톱 앱 엔진의 텔레메트리는 공개 인터페이스로 읽을 수 없다"고 적었습니다.
 > `STRATA_TELEMETRY_KEY` 환경 변수 경로를 빠뜨린 잘못이었고, 위와 같이 고쳤습니다.
-
-## 추론 측정 (사용자가 켜는 기능, POST 1종)
-
-같은 조건의 반복 측정이 필요할 때, 앱 호스트가 공개하는 추론 API로 성능을 직접 잽니다(텔레메트리와 별개).
-Strata 앱의 "Strata를 앱에 연결" 화면이 안내하는 주소(`http://127.0.0.1:47831/v1`)와 Serving API 키를 씁니다.
-
-| 항목 | 내용 |
-|---|---|
-| 보내는 요청 | `GET /v1/models`(모델 ID를 비워 둔 경우만), `POST /v1/chat/completions` |
-| 요청 본문 | 고정 시험 문장 1개 `Explain how a rainbow forms in clear, simple language.`(ID `lapc-rainbow-v1`), `temperature 0`, `reasoning_effort "none"`, `max_tokens 200`(설정 가능), `stream true`, `stream_options.include_usage true`. Strata 데스크톱 앱 자체 벤치마크와 같은 문장·설정입니다 |
-| 언제 보내나 | [지금 측정] 버튼, `lapc bench`, 또는 사용자가 켠 자동 측정(기본 꺼짐, N분마다 1회, 최근 15초 GPU 사용률이 기준 이상이면 미룸) |
-| 앱이 재는 값 (실측) | 첫 토큰까지 시간: 요청 전송부터 내용(`content` 또는 `reasoning_content`)이 있는 첫 청크 수신까지 |
-| 앱이 계산하는 값 | 생성 속도 = (출력 토큰 − 1) ÷ 첫 토큰~마지막 토큰 수신 시간. 출력 토큰이 2개 미만이면 N/A |
-| 엔진 보고값 | 마지막 청크의 `usage`(prompt/completion/cached 토큰), `timings.predicted_per_second`, `timings.prompt_per_second` |
-| 저장하지 않는 것 | 응답 내용(시간 측정에만 쓰고 버림), API 키 값 |
-| 영향 | 측정 중 GPU를 잠시 씁니다. 엔진의 프롬프트 캐시가 바뀌어 진행 중인 대화의 다음 응답이 조금 늦어질 수 있습니다 |
 
 ## 로컬 공유(LAN 공유)를 쓰지 않는 이유
 

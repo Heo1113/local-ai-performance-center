@@ -7,10 +7,10 @@ namespace LocalAiPerf.Tests.Runtimes;
 
 public class StrataAdapterTests
 {
-    private static StrataAdapter Adapter(string baseUrl, string? key = null, int timeoutMs = 2000, TimeProvider? time = null)
+    internal static StrataAdapter Adapter(string baseUrl, string? key = null, int timeoutMs = 2000, TimeProvider? time = null)
         => new(new StrataAdapterOptions(baseUrl, key, TimeSpan.FromMilliseconds(timeoutMs), TimeSpan.FromSeconds(30), "STRATA_TELEMETRY_KEY"), time);
 
-    private static async Task<RuntimeSnapshot> PollUntil(StrataAdapter adapter, Func<RuntimeSnapshot, bool> condition, int attempts = 40)
+    internal static async Task<RuntimeSnapshot> PollUntil(StrataAdapter adapter, Func<RuntimeSnapshot, bool> condition, int attempts = 40)
     {
         RuntimeSnapshot snapshot = await adapter.PollAsync(TestContext.Current.CancellationToken);
         for (var i = 0; i < attempts && !condition(snapshot); i++)
@@ -302,6 +302,43 @@ public class StrataConnectTests
         using var noKey = new StrataAdapter(new StrataAdapterOptions(server.BaseUrl, null, TimeSpan.FromSeconds(2), TimeSpan.FromSeconds(30), "MY_KEY_VAR"));
         var missing = await noKey.PollAsync(TestContext.Current.CancellationToken);
         Assert.Contains("MY_KEY_VAR", missing.Error!.Hint); // the variable this app reads
+    }
+
+    [Fact]
+    public async Task Telemetry_only_key_connects_marks_metadata_as_not_provided_and_stops_asking_for_it()
+    {
+        await using var server = new MockStrataServer(mode: MockMode.AuthRequired) { RequiredKey = "inference-key", TelemetryKey = "tele-only" };
+        server.Start();
+        using var adapter = StrataAdapterTests.Adapter(server.BaseUrl, key: "tele-only");
+
+        var snapshot = await StrataAdapterTests.PollUntil(adapter, s => s.Server?.MetadataRestricted == true);
+
+        Assert.Equal(RuntimeConnectionState.Connected, snapshot.State);
+        Assert.True(snapshot.Server!.MetadataRestricted);
+        Assert.Null(snapshot.Server.EngineVersion);
+        Assert.Equal(server.ModelId, snapshot.Model?.Id);
+        Assert.NotNull(snapshot.Model?.ContextTokens); // from telemetry and /health, which the key can read
+        Assert.DoesNotContain(server.Requests, r => r.Path is "/props" or "/v1/models"); // refused once at /v1/status: not asked again
+    }
+
+    [Fact]
+    public void Last_completed_request_is_the_newest_successful_one()
+    {
+        var snapshot = new RuntimeSnapshot
+        {
+            RuntimeKind = "strata",
+            Timestamp = DateTimeOffset.UnixEpoch,
+            State = RuntimeConnectionState.Connected,
+            RecentRequests =
+            [
+                new CompletedRequest { Id = "a", StartedUnix = 100, OutputTokens = 100, DecodeMs = 1000 },
+                new CompletedRequest { Id = "b", StartedUnix = 300, Finish = "error" },
+                new CompletedRequest { Id = "c", StartedUnix = 200, OutputTokens = 300, DecodeMs = 2000 },
+            ],
+        };
+
+        Assert.Equal("c", snapshot.LastCompletedRequest?.Id);
+        Assert.Equal(150, snapshot.LastCompletedRequest?.DecodeTokPerSec);
     }
 }
 

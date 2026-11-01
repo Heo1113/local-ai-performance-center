@@ -40,12 +40,12 @@ public sealed partial class DashboardViewModel(MonitoringService service) : Page
     [ObservableProperty] public partial string RuntimeModel { get; set; } = Fmt.NA;
     [ObservableProperty] public partial string RuntimeEngine { get; set; } = Fmt.NA;
     [ObservableProperty] public partial string AnswerTokS { get; set; } = Fmt.NA;
+    [ObservableProperty] public partial string AnswerBasis { get; set; } = "";
     [ObservableProperty] public partial string PrefillTokS { get; set; } = Fmt.NA;
     [ObservableProperty] public partial string AggregateTokS { get; set; } = Fmt.NA;
     [ObservableProperty] public partial string Requests { get; set; } = Fmt.NA;
     [ObservableProperty] public partial string Context { get; set; } = Fmt.NA;
     [ObservableProperty] public partial string RuntimeMessage { get; set; } = "";
-    [ObservableProperty] public partial string LastBenchmark { get; set; } = Fmt.NA;
     [ObservableProperty] public partial string MeasuredAt { get; set; } = Fmt.NA;
     [ObservableProperty] public partial ChartModel? UtilizationChart { get; set; }
     [ObservableProperty] public partial ChartModel? PowerChart { get; set; }
@@ -91,11 +91,6 @@ public sealed partial class DashboardViewModel(MonitoringService service) : Page
 
     private void UpdateRuntime(RuntimeSnapshot? rt)
     {
-        LastBenchmark = service.LastBenchmark is { } bench
-            ? bench.Success
-                ? $"{Fmt.Num(bench.ClientDecodeTokPerSec ?? bench.EngineDecodeTokPerSec, "0.0", "tok/s")} · 첫 토큰 {Fmt.Num(bench.FirstTokenMs, "0", "ms")} · {Fmt.DateTime(bench.StartedAt)}"
-                : $"실패 · {Fmt.DateTime(bench.StartedAt)}"
-            : "기록 없음 (AI 런타임 화면에서 측정)";
         RuntimeName = service.Runtime?.DisplayName ?? "AI 엔진";
         if (service.Runtime is null)
         {
@@ -123,15 +118,36 @@ public sealed partial class DashboardViewModel(MonitoringService service) : Page
         RuntimeMessage = rt.Error is { } e ? $"[{RuntimeStateText.ToKorean(e.Category)}] {e.Message}" : "";
         var reachable = rt.IsReachable;
         RuntimeModel = rt.Model?.Id is string id ? id + (reachable ? "" : " (마지막 확인)") : Fmt.NA;
-        RuntimeEngine = rt.Server?.EngineVersion ?? (reachable ? $"{Fmt.NA} - {rt.Server?.EngineVersionNote}" : Fmt.NA);
-        AnswerTokS = reachable ? Fmt.Num(rt.Rates?.AnswerTokPerSec, "0.0", "tok/s") : Fmt.NA;
-        PrefillTokS = reachable ? Fmt.Num(rt.Rates?.PrefillTokPerSec, "0.0", "tok/s") : Fmt.NA;
+        RuntimeEngine = rt.Server?.EngineVersion
+            ?? (rt.Server?.MetadataRestricted == true ? "제공 안 됨 (읽기 전용 텔레메트리 키)" : reachable ? $"{Fmt.NA} - {rt.Server?.EngineVersionNote}" : Fmt.NA);
+        var last = reachable ? rt.LastCompletedRequest : null;
+        if (reachable && rt.Rates?.AnswerTokPerSec is double live)
+        {
+            AnswerTokS = Fmt.Num(live, "0.0", "tok/s");
+            AnswerBasis = "생성 중 · 엔진 보고";
+        }
+        else if (last?.DecodeTokPerSec is double lastRate)
+        {
+            AnswerTokS = Fmt.Num(lastRate, "0.0", "tok/s");
+            AnswerBasis = $"마지막 완료 요청 {Fmt.Unix(last.StartedUnix)} · 계산값 (지금은 생성 중 아님)";
+        }
+        else
+        {
+            AnswerTokS = Fmt.NA;
+            AnswerBasis = reachable ? "생성 중이 아니고 완료된 요청 기록도 없음" : "";
+        }
+
+        PrefillTokS = !reachable ? Fmt.NA
+            : rt.Rates?.PrefillTokPerSec is double prefill ? Fmt.Num(prefill, "0.0", "tok/s")
+            : last?.PrefillTokPerSec is double lastPrefill ? $"{Fmt.Num(lastPrefill, "0.0", "tok/s")} (마지막 요청, 계산값)"
+            : Fmt.NA;
         AggregateTokS = reachable ? Fmt.Num(rt.Rates?.AggregateOutputTokPerSec, "0.0", "tok/s") : Fmt.NA;
         Requests = reachable && rt.Work is { } work
             ? $"처리 중 {Fmt.Int(work.Active)} · 대기 {Fmt.Int(work.Queued)}"
             : Fmt.NA;
-        Context = reachable && rt.Model?.ContextTokens is long ctx
-            ? $"{Fmt.Int(rt.MaxSlotContextUsed)} / {ctx:N0} tokens ({Fmt.Percent(rt.ContextFillPercent)})"
-            : Fmt.NA;
+        Context = !reachable || rt.Model?.ContextTokens is not long ctx ? Fmt.NA
+            : rt.MaxSlotContextUsed is long used ? $"{used:N0} / {ctx:N0} tokens ({Fmt.Percent(rt.ContextFillPercent)})"
+            : rt.Work?.Active == 0 ? $"사용 중 아님 · 최대 {ctx:N0} tokens"
+            : $"{Fmt.NA} / {ctx:N0} tokens";
     }
 }

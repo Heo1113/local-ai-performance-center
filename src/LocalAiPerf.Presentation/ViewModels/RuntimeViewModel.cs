@@ -4,14 +4,12 @@ using CommunityToolkit.Mvvm.Input;
 using LocalAiPerf.Core;
 using LocalAiPerf.Core.Runtime;
 using LocalAiPerf.Presentation.Charts;
-using LocalAiPerf.Presentation.Services;
-using LocalAiPerf.Runtimes.Benchmark;
 using LocalAiPerf.Recording;
 
 namespace LocalAiPerf.Presentation.ViewModels;
 
 /// <summary>AI runtime (Strata) connection, identity, settings, live inference numbers, requests and errors.</summary>
-public sealed partial class RuntimeViewModel(MonitoringService service, IUiDispatcher ui) : PageViewModel
+public sealed partial class RuntimeViewModel(MonitoringService service) : PageViewModel
 {
     private const string Reported = "엔진 보고";
     private const string Derived = "계산값";
@@ -29,18 +27,6 @@ public sealed partial class RuntimeViewModel(MonitoringService service, IUiDispa
     [ObservableProperty] public partial string NextRetry { get; set; } = "";
     [ObservableProperty] public partial string KeyStatus { get; set; } = "";
     [ObservableProperty] public partial ChartModel? ThroughputChart { get; set; }
-    [ObservableProperty] public partial string BenchmarkTarget { get; set; } = "";
-    [ObservableProperty] public partial string BenchmarkKeyStatus { get; set; } = "";
-    [ObservableProperty] public partial string BenchmarkStatus { get; set; } = "";
-    [ObservableProperty] public partial string BenchmarkHint { get; set; } = "";
-    [ObservableProperty] public partial string BenchmarkAuto { get; set; } = "";
-    [ObservableProperty] public partial ChartModel? BenchmarkChart { get; set; }
-
-    [ObservableProperty]
-    [NotifyCanExecuteChangedFor(nameof(RunBenchmarkCommand))]
-    public partial bool IsBenchmarking { get; set; }
-
-    public ObservableCollection<BenchmarkRow> Benchmarks { get; } = [];
 
     public ObservableCollection<ValueRow> Server { get; } = [];
     public ObservableCollection<ValueRow> Model { get; } = [];
@@ -52,123 +38,13 @@ public sealed partial class RuntimeViewModel(MonitoringService service, IUiDispa
 
     public override Task OnActivatedAsync()
     {
-        if (!_subscribed)
-        {
-            // Automatic runs finish on a background thread; the table reloads on the next frame.
-            service.BenchmarkCompleted += _ => Interlocked.Increment(ref _benchmarkVersion);
-            _subscribed = true;
-        }
-
         Update();
-        UpdateBenchmarkInfo();
-        LoadBenchmarks();
         return Task.CompletedTask;
-    }
-
-    private int _benchmarkVersion;
-    private int _shownBenchmarkVersion = -1;
-    private bool _subscribed;
-
-    private bool CanRunBenchmark() => !IsBenchmarking;
-
-    /// <summary>Sends the fixed test prompt (only when the user presses the button) and shows the timings.</summary>
-    [RelayCommand(CanExecute = nameof(CanRunBenchmark))]
-    private async Task RunBenchmarkAsync()
-    {
-        IsBenchmarking = true;
-        BenchmarkHint = "";
-        BenchmarkStatus = "측정 준비 중";
-        try
-        {
-            var progress = new UiProgress(text => ui.Post(() => BenchmarkStatus = text));
-            var batch = await service.RunBenchmarkAsync(null, progress).ConfigureAwait(false);
-            ui.Post(() => ShowBatch(batch));
-        }
-        finally
-        {
-            ui.Post(() => IsBenchmarking = false);
-        }
-    }
-
-    private void ShowBatch(BenchmarkBatch batch)
-    {
-        if (batch.Error is { } error)
-        {
-            BenchmarkStatus = $"측정하지 못했습니다 ({RuntimeStateText.ToKorean(error.Category)}): {error.Message}";
-            BenchmarkHint = error.Hint ?? "";
-        }
-        else
-        {
-            var ok = batch.Runs.Count(r => r.Success);
-            var failed = batch.Runs.FirstOrDefault(r => !r.Success);
-            BenchmarkStatus = $"측정 {batch.Runs.Count}회 완료 (성공 {ok}회)" + (batch.Stored ? "" : " · 저장되지 않음 (데이터베이스 사용 불가)");
-            BenchmarkHint = failed?.Error ?? "";
-            if (failed?.ErrorCategory is RuntimeErrorCategory.Authentication)
-            {
-                BenchmarkHint += $" Strata 앱 'Strata를 앱에 연결' 화면의 API 키를 환경 변수 {KeyVariable()}에 넣고 이 프로그램을 다시 시작하세요.";
-            }
-        }
-
-        UpdateBenchmarkInfo();
-        LoadBenchmarks();
-    }
-
-    private string KeyVariable() => service.Settings.Benchmark.ApiKeyEnvironmentVariable ?? Core.Settings.BenchmarkSettings.DefaultKeyVariable;
-
-    private void UpdateBenchmarkInfo()
-    {
-        var b = service.Settings.Benchmark;
-        BenchmarkTarget = $"{b.BaseUrl}/v1/chat/completions · 모델 {(string.IsNullOrWhiteSpace(b.Model) ? "자동 (/v1/models 첫 번째)" : b.Model)} · 최대 {b.MaxTokens} 토큰 · {b.Repeat}회";
-        var variable = b.ApiKeyEnvironmentVariable;
-        BenchmarkAuto = b.AutoIntervalMinutes <= 0
-            ? "자동 측정: 꺼짐 (설정에서 켤 수 있음)"
-            : $"자동 측정: {b.AutoIntervalMinutes}분마다 1회, GPU 사용률 {b.AutoSkipGpuUtilPercent}% 이상이면 미룸"
-              + (service.NextAutoBenchmarkAt is DateTimeOffset next ? $" · 다음 예정 {Fmt.Time(next)}" : "")
-              + (service.AutoBenchmarkDeferral is string deferral ? $" · {deferral}" : "");
-        BenchmarkKeyStatus = string.IsNullOrWhiteSpace(variable)
-            ? "API 키 환경 변수: 사용 안 함"
-            : $"API 키 환경 변수 {variable}: {(string.IsNullOrEmpty(Environment.GetEnvironmentVariable(variable)) ? "값 없음" : "값 있음 (내용은 표시하지 않음)")}";
-    }
-
-    private void LoadBenchmarks()
-    {
-        _shownBenchmarkVersion = Volatile.Read(ref _benchmarkVersion);
-        var runs = service.RecentBenchmarks(200);
-        Benchmarks.Clear();
-        foreach (var r in runs.Take(30))
-        {
-            Benchmarks.Add(ToRow(r));
-        }
-
-        BenchmarkChart = ChartBuilder.BenchmarkTrend(runs);
-    }
-
-    public static BenchmarkRow ToRow(BenchmarkResult r) => new(
-        Fmt.DateTime(r.StartedAt),
-        r.Model ?? Fmt.NA,
-        r.Success ? "성공" : $"실패: {(r.ErrorCategory is { } c ? RuntimeStateText.ToKorean(c) : "")} {r.Error}".TrimEnd(),
-        Fmt.Num(r.FirstTokenMs, "0", "ms"),
-        Fmt.Num(r.ClientDecodeTokPerSec, "0.0", "tok/s"),
-        Fmt.Num(r.EngineDecodeTokPerSec, "0.0", "tok/s"),
-        Fmt.Num(r.EnginePromptTokPerSec, "0.0", "tok/s"),
-        $"{Fmt.Int(r.PromptTokens)} / {Fmt.Int(r.CompletionTokens)}" + (r.CachedTokens is long cached && cached > 0 ? $" (캐시 {cached})" : ""),
-        Fmt.Num(r.TotalMs is double ms ? ms / 1000 : null, "0.00", "s"),
-        !r.Success);
-
-    private sealed class UiProgress(Action<string> report) : IProgress<string>
-    {
-        public void Report(string value) => report(value);
     }
 
     public override void OnFrame(TelemetryFrame frame)
     {
         Update();
-        UpdateBenchmarkInfo();
-        if (_shownBenchmarkVersion != Volatile.Read(ref _benchmarkVersion))
-        {
-            LoadBenchmarks();
-        }
-
         var frames = DashboardViewModel.Window(service.Live.Snapshot(), frame.Timestamp, TimeSpan.FromMinutes(Math.Clamp(service.Settings.Ui.LiveChartMinutes, 1, 60)));
         ThroughputChart = ChartBuilder.Throughput(frames, service.Interval);
     }
@@ -222,7 +98,11 @@ public sealed partial class RuntimeViewModel(MonitoringService service, IUiDispa
 
         Server.Clear();
         Server.Add(new ValueRow("서비스", rt.Server?.Service ?? Fmt.NA, Reported));
-        Server.Add(new ValueRow("엔진 버전", rt.Server?.EngineVersion ?? Fmt.NA, Reported, rt.Server?.EngineVersion is null ? rt.Server?.EngineVersionNote ?? "" : ""));
+        var restricted = rt.Server?.MetadataRestricted == true;
+        const string NotProvided = "제공 안 됨";
+        const string RestrictedNote = "읽기 전용 텔레메트리 키로는 Strata가 제공하지 않음 (/v1/status, /props, /v1/models는 추론 API 키 필요)";
+        Server.Add(new ValueRow("엔진 버전", rt.Server?.EngineVersion ?? (restricted ? NotProvided : Fmt.NA), Reported,
+            rt.Server?.EngineVersion is null ? restricted ? RestrictedNote : rt.Server?.EngineVersionNote ?? "" : ""));
         Server.Add(new ValueRow("텔레메트리 출처", rt.Server?.TelemetrySource switch
         {
             "server-v1" => "/v1/telemetry (schema v1)",
@@ -239,12 +119,14 @@ public sealed partial class RuntimeViewModel(MonitoringService service, IUiDispa
         Model.Clear();
         Model.Add(new ValueRow("모델", rt.Model?.Id ?? Fmt.NA, Reported, rt.IsReachable || rt.Model?.Id is null ? "" : "마지막으로 확인된 값"));
         Model.Add(new ValueRow("로드 상태", Fmt.Bool(rt.Model?.Loaded), Reported));
-        Model.Add(new ValueRow("모델 파일", rt.Model?.ModelFileName ?? Fmt.NA, Reported, "파일 이름만 표시 (경로 제외)"));
+        Model.Add(new ValueRow("모델 파일", rt.Model?.ModelFileName ?? (restricted ? NotProvided : Fmt.NA), Reported,
+            rt.Model?.ModelFileName is null && restricted ? RestrictedNote : "파일 이름만 표시 (경로 제외)"));
         Model.Add(new ValueRow("컨텍스트 한도", Fmt.Int(rt.Model?.ContextTokens, "tokens"), Reported));
         Model.Add(new ValueRow("병렬 슬롯", Fmt.Int(rt.Work?.SlotsEffective), Reported,
             rt.Work?.SlotsRequested is int requested ? $"요청값 {requested}" : ""));
         Model.Add(new ValueRow("비전 입력", Fmt.Bool(rt.Model?.Vision), Reported));
-        Model.Add(new ValueRow("별칭", rt.Model?.Aliases.Count > 0 ? string.Join(", ", rt.Model.Aliases) : Fmt.NA, Reported));
+        Model.Add(new ValueRow("별칭", rt.Model?.Aliases.Count > 0 ? string.Join(", ", rt.Model.Aliases) : restricted ? NotProvided : Fmt.NA, Reported,
+            rt.Model?.Aliases.Count > 0 || !restricted ? "" : RestrictedNote));
 
         Settings.Clear();
         foreach (var setting in rt.Settings)
@@ -252,11 +134,36 @@ public sealed partial class RuntimeViewModel(MonitoringService service, IUiDispa
             Settings.Add(new ValueRow(setting.Key, setting.Value, Reported, "/props 기본 생성 설정"));
         }
 
+        if (Settings.Count == 0 && restricted)
+        {
+            Settings.Add(new ValueRow("기본 생성 설정", NotProvided, Reported, RestrictedNote));
+        }
+
         Live.Clear();
         var reachable = rt.IsReachable;
-        Live.Add(new ValueRow("답변 생성 속도", reachable ? Fmt.Num(rt.Rates?.AnswerTokPerSec, "0.0", "tok/s") : Fmt.NA, Reported,
-            rt.Rates?.AnswerWindowSeconds is double window ? $"최근 {window:0.#}초 구간" : "생성 중일 때만 값이 있음"));
-        Live.Add(new ValueRow("프롬프트 처리 속도", reachable ? Fmt.Num(rt.Rates?.PrefillTokPerSec, "0.0", "tok/s") : Fmt.NA, Reported));
+        var last = reachable ? rt.LastCompletedRequest : null;
+        if (reachable && rt.Rates?.AnswerTokPerSec is double answer)
+        {
+            Live.Add(new ValueRow("답변 생성 속도", Fmt.Num(answer, "0.0", "tok/s"), Reported,
+                rt.Rates?.AnswerWindowSeconds is double window ? $"생성 중 · 최근 {window:0.#}초 구간" : "생성 중"));
+        }
+        else
+        {
+            Live.Add(new ValueRow("답변 생성 속도", last?.DecodeTokPerSec is double lastDecode ? Fmt.Num(lastDecode, "0.0", "tok/s") : Fmt.NA,
+                last?.DecodeTokPerSec is null ? Reported : Derived,
+                last?.DecodeTokPerSec is null ? "생성 중일 때 표시 (완료된 요청 기록 없음)" : $"지금은 생성 중 아님 · 마지막 완료 요청 {Fmt.Unix(last.StartedUnix)}: 출력 토큰 ÷ 디코드 시간"));
+        }
+
+        if (reachable && rt.Rates?.PrefillTokPerSec is double prefill)
+        {
+            Live.Add(new ValueRow("프롬프트 처리 속도", Fmt.Num(prefill, "0.0", "tok/s"), Reported));
+        }
+        else
+        {
+            Live.Add(new ValueRow("프롬프트 처리 속도", last?.PrefillTokPerSec is double lastPrefill ? Fmt.Num(lastPrefill, "0.0", "tok/s") : Fmt.NA,
+                last?.PrefillTokPerSec is null ? Reported : Derived,
+                last?.PrefillTokPerSec is null ? "" : "마지막 완료 요청: (프롬프트 − 캐시 재사용) 토큰 ÷ 프롬프트 처리 시간"));
+        }
         Live.Add(new ValueRow("전체 출력 처리량", reachable ? Fmt.Num(rt.Rates?.AggregateOutputTokPerSec, "0.0", "tok/s") : Fmt.NA, Derived,
             "출력 토큰 카운터 증가분 ÷ 조회 간격"));
         Live.Add(new ValueRow("처리 중 / 대기 / 대기열", reachable && rt.Work is { } w

@@ -38,7 +38,7 @@ public sealed partial class MainViewModel : ObservableObject, IDisposable
         _time = time ?? TimeProvider.System;
         Dashboard = new DashboardViewModel(service);
         Hardware = new HardwareViewModel(service);
-        Runtime = new RuntimeViewModel(service, ui);
+        Runtime = new RuntimeViewModel(service);
         History = new HistoryViewModel(service, dialogs, shell, ui, _time);
         Compare = new CompareViewModel(service, dialogs, ui);
         Settings = new SettingsViewModel(service, settingsStore, dialogs, shell, ui, logSink);

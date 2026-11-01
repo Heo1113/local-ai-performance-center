@@ -3,6 +3,10 @@ namespace LocalAiPerf.Storage;
 /// <summary>Database schema. Times are Unix milliseconds (UTC). No prompt or answer text is ever stored.</summary>
 internal static class Schema
 {
+    /// <summary>
+    /// 2: a build of this app (commit dc85d73, since removed) added a benchmark_runs table. Version 2 adds nothing new, so
+    /// databases that build already upgraded stay readable; an existing benchmark_runs table is left untouched.
+    /// </summary>
     public const int CurrentVersion = 2;
 
     public static readonly string[] RequiredTables =
@@ -128,34 +132,5 @@ internal static class Schema
         );
         CREATE INDEX IF NOT EXISTS ix_events_session ON events(session_id, t_ms);
         CREATE INDEX IF NOT EXISTS ix_events_time ON events(t_ms);
-        """;
-
-    /// <summary>
-    /// Version 2: opt-in inference measurements (benchmark runs). Only numbers are stored, never the prompt or the answer.
-    /// session_id is NULL when nothing was being recorded at the time of the run.
-    /// </summary>
-    public const string V2 = """
-        CREATE TABLE IF NOT EXISTS benchmark_runs (
-            id INTEGER PRIMARY KEY,
-            session_id INTEGER REFERENCES sessions(id) ON DELETE CASCADE,
-            t_ms INTEGER NOT NULL,
-            endpoint TEXT NOT NULL,
-            model TEXT,
-            prompt_id TEXT NOT NULL,
-            max_tokens INTEGER NOT NULL,
-            ok INTEGER NOT NULL,
-            error TEXT,
-            error_category INTEGER,
-            ttft_ms REAL,
-            total_ms REAL,
-            prompt_tokens INTEGER,
-            completion_tokens INTEGER,
-            cached_tokens INTEGER,
-            decode_tok_s REAL,
-            engine_decode_tok_s REAL,
-            engine_prompt_tok_s REAL
-        );
-        CREATE INDEX IF NOT EXISTS ix_benchmark_session ON benchmark_runs(session_id, t_ms);
-        CREATE INDEX IF NOT EXISTS ix_benchmark_time ON benchmark_runs(t_ms);
         """;
 }

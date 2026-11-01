@@ -52,13 +52,6 @@ public static class SeriesExtractor
         Put(MetricKeys.ReqOutputTokens, requests.Where(r => r.Request.OutputTokens is not null).Select(r => new SeriesPoint(r.Time, r.Request.OutputTokens!.Value)));
 
         Put(MetricKeys.EffTokensPerJoule, Efficiency(busy, gpu, Math.Max(1000, data.Session.SampleIntervalMs)));
-
-        // Only successful measurement runs; failed runs are listed but carry no performance value.
-        var bench = data.BenchmarkRuns.Where(b => b.Success).ToList();
-        Put(MetricKeys.BenchDecodeTokS, BenchPoints(bench, b => b.ClientDecodeTokPerSec));
-        Put(MetricKeys.BenchEngineDecodeTokS, BenchPoints(bench, b => b.EngineDecodeTokPerSec));
-        Put(MetricKeys.BenchEnginePromptTokS, BenchPoints(bench, b => b.EnginePromptTokPerSec));
-        Put(MetricKeys.BenchFirstTokenMs, BenchPoints(bench, b => b.FirstTokenMs));
         return result;
     }
 
@@ -101,9 +94,6 @@ public static class SeriesExtractor
         }
     }
 
-    private static IEnumerable<SeriesPoint> BenchPoints(IEnumerable<BenchmarkResult> rows, Func<BenchmarkResult, double?> value)
-        => Select(rows, r => r.StartedAt.ToUnixTimeMilliseconds(), value);
-
     private static IEnumerable<SeriesPoint> Points(IEnumerable<GpuPoint> rows, Func<GpuPoint, double?> value)
         => Select(rows, r => r.TimeMs, value);
 
@@ -127,7 +117,6 @@ public static class SeriesExtractor
     /// <summary>The metrics shown in session summaries and comparisons, in display order.</summary>
     public static IReadOnlyList<string> SummaryMetricKeys { get; } =
     [
-        MetricKeys.BenchDecodeTokS, MetricKeys.BenchEngineDecodeTokS, MetricKeys.BenchEnginePromptTokS, MetricKeys.BenchFirstTokenMs,
         MetricKeys.RtAnswerTokS, MetricKeys.RtPrefillTokS, MetricKeys.RtAggregateTokS, MetricKeys.ReqDecodeTokS, MetricKeys.ReqPrefillTokS,
         MetricKeys.ReqFirstTokenS, MetricKeys.ReqDurationS, MetricKeys.EffTokensPerJoule,
         MetricKeys.GpuUtil, MetricKeys.GpuTemp, MetricKeys.GpuPower, MetricKeys.GpuVramUsedGiB, MetricKeys.GpuClockGraphics,

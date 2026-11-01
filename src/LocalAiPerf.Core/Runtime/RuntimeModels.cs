@@ -82,6 +82,12 @@ public sealed record RuntimeServerInfo
     /// <summary>Why the engine version is unknown, when it is.</summary>
     public string? EngineVersionNote { get; init; }
 
+    /// <summary>
+    /// True when the key in use is a read-only telemetry key: Strata then refuses /v1/status, /props and /v1/models,
+    /// so the engine version, model file, default sampling settings and aliases are not available (not an error).
+    /// </summary>
+    public bool MetadataRestricted { get; init; }
+
     /// <summary>server-v1, legacy-adapter or status-only.</summary>
     public string? TelemetrySource { get; init; }
     public int? SchemaVersion { get; init; }
@@ -213,6 +219,9 @@ public sealed record RuntimeSnapshot
 
     /// <summary>Largest held token count over the reported slots (current context use of the fullest slot).</summary>
     public long? MaxSlotContextUsed => Slots.Count == 0 ? null : Slots.Max(s => s.HeldTokens);
+
+    /// <summary>The newest completed request in the engine's recent list (numbers only), if any.</summary>
+    public CompletedRequest? LastCompletedRequest => RecentRequests.Where(r => !r.IsError).MaxBy(r => r.StartedUnix ?? double.MinValue);
 
     public double? ContextFillPercent => MaxSlotContextUsed is long used && Model?.ContextTokens is long total && total > 0
         ? 100.0 * used / total
