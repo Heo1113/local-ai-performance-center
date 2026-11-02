@@ -59,6 +59,17 @@ jobs:
       - name: Test
         run: dotnet test --project tests/LocalAiPerf.Tests -c Release --no-build
 
+      - name: Chart font under the Korean regional format (ko-KR, as on the user's PC)
+        shell: pwsh
+        run: |
+          Set-Culture ko-KR
+          $env:LAPC_FONT_REPORT = Join-Path $PWD 'font-report-ko.txt'
+          dotnet test --project tests/LocalAiPerf.Tests -c Release --no-build --filter-method "*Chart_font_is_a_name_the_chart_library_draws_hangul_with"
+          $code = $LASTEXITCODE
+          if (Test-Path $env:LAPC_FONT_REPORT) { Get-Content $env:LAPC_FONT_REPORT -Encoding utf8 } else { Write-Host 'no font report written' }
+          Set-Culture en-US
+          exit $code
+
       - name: CLI recording smoke test (Windows CPU/RAM API, NVML if present, mock Strata)
         shell: pwsh
         run: ./scripts/smoke-cli.ps1 -Configuration Release

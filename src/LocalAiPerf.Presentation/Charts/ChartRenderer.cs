@@ -13,27 +13,50 @@ public static class ChartRenderer
     private static readonly string[] HangulFontCandidates = ["Malgun Gothic", "NanumGothic", "Noto Sans CJK KR", "Noto Sans KR"];
 
     /// <summary>
-    /// A font that really has Hangul glyphs. Malgun Gothic ships with Windows; the others are for Linux build machines.
-    /// The check is on glyphs, not on the reported family name: a localized system can report Malgun Gothic as "맑은 고딕";
-    /// comparing names then rejected it and charts fell back to a font without Hangul (legend drawn as boxes on a user's PC).
+    /// The font name charts use for Korean text, chosen the way ScottPlot will actually draw it.
+    /// ScottPlot only uses a font whose name appears in SKFontManager.Default.FontFamilies, and on Korean Windows that list
+    /// holds the localized name ("맑은 고딕"), not "Malgun Gothic"; any other name silently falls back to a font without Hangul
+    /// (labels drawn as boxes on the user's PC). So every candidate, including the localized name Skia reports for it, is
+    /// checked through ScottPlot's own typeface lookup for a Hangul glyph.
     /// </summary>
-    internal static readonly string? Font = ResolveHangulFont(HangulFontCandidates, SkiaSharp.SKFontManager.Default.MatchFamily);
-
-    /// <param name="match">Finds the installed typeface for a family name (the caller's typeface is disposed here).</param>
-    internal static string? ResolveHangulFont(IEnumerable<string> candidates, Func<string, SkiaSharp.SKTypeface?> match)
-    {
-        foreach (var name in candidates)
+    internal static readonly string? Font = ResolveHangulFont(
+        HangulFontCandidates,
+        name =>
         {
-            using var typeface = match(name);
-            if (typeface is not null && typeface.ContainsGlyph('가'))
+            using var typeface = SkiaSharp.SKFontManager.Default.MatchFamily(name);
+            return typeface?.FamilyName;
+        },
+        SkiaSharp.SKFontManager.Default.FontFamilies,
+        name => ScottPlot.Fonts.GetTypeface(name, bold: false, italic: false));
+
+    /// <param name="preferred">Known Hangul fonts, in order of preference.</param>
+    /// <param name="reportedName">The family name the font system reports for a name (may be localized), or null.</param>
+    /// <param name="installed">All installed family names, tried last.</param>
+    /// <param name="drawWith">The typeface the chart library will draw with for a name (not disposed: the library caches it).</param>
+    internal static string? ResolveHangulFont(IEnumerable<string> preferred, Func<string, string?> reportedName,
+        IEnumerable<string> installed, Func<string, SkiaSharp.SKTypeface?> drawWith)
+    {
+        var names = new List<string>();
+        foreach (var name in preferred)
+        {
+            if (reportedName(name) is string reported)
+            {
+                names.Add(reported);
+            }
+
+            names.Add(name);
+        }
+
+        names.AddRange(installed);
+        foreach (var name in names.Distinct(StringComparer.OrdinalIgnoreCase))
+        {
+            if (drawWith(name) is { } typeface && typeface.ContainsGlyph('가') && typeface.ContainsGlyph('A'))
             {
                 return name;
             }
         }
 
-        // Any installed font with Hangul (for example on a system without Malgun Gothic).
-        using var fallback = SkiaSharp.SKFontManager.Default.MatchCharacter(null, SkiaSharp.SKFontStyle.Normal, ["ko-KR", "ko"], '가');
-        return fallback?.FamilyName;
+        return null;
     }
 
     /// <summary>Returns false when there is nothing to draw (the caller shows <see cref="ChartModel.EmptyText"/>).</summary>

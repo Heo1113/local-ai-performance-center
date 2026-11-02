@@ -115,22 +115,57 @@ public class ChartRendererTests
     }
 
     [Fact]
-    public void Chart_font_is_chosen_by_hangul_glyphs_not_by_the_reported_family_name()
+    public void Chart_font_is_a_name_the_chart_library_draws_hangul_with()
     {
-        static SkiaSharp.SKTypeface? Hangul() => new[] { "Malgun Gothic", "NanumGothic", "Noto Sans CJK KR" }
-            .Select(name => SkiaSharp.SKTypeface.FromFamilyName(name)).FirstOrDefault(t => t.ContainsGlyph('가'));
-        using (var probe = Hangul())
-        {
-            if (probe is null)
+        if (!SkiaSharp.SKFontManager.Default.FontFamilies.Any(f =>
             {
-                Assert.Skip("이 머신에는 시험용 한글 글꼴이 없습니다.");
-            }
+                using var typeface = SkiaSharp.SKTypeface.FromFamilyName(f);
+                return typeface.ContainsGlyph('가');
+            }))
+        {
+            Assert.Skip("이 머신에는 한글 글꼴이 없습니다.");
         }
 
-        // Korean Windows reports Malgun Gothic as "맑은 고딕": a font whose reported name differs must still be used.
-        Assert.Equal("Malgun Gothic", ChartRenderer.ResolveHangulFont(["Malgun Gothic"], _ => Hangul()));
+        if (Environment.GetEnvironmentVariable("LAPC_FONT_REPORT") is { Length: > 0 } report)
+        {
+            // CI evidence: what the font system reports under the current regional format.
+            var families = SkiaSharp.SKFontManager.Default.FontFamilies;
+            using var malgun = SkiaSharp.SKFontManager.Default.MatchFamily("Malgun Gothic");
+            File.WriteAllText(report, string.Join(Environment.NewLine,
+                $"culture={System.Globalization.CultureInfo.CurrentCulture.Name}",
+                $"chosen={ChartRenderer.Font}",
+                $"drawn_with={(ChartRenderer.Font is null ? "-" : ScottPlot.Fonts.GetTypeface(ChartRenderer.Font, false, false).FamilyName)}",
+                $"malgun_reported_as={malgun?.FamilyName ?? "-"}",
+                $"families_contain_Malgun_Gothic={families.Contains("Malgun Gothic", StringComparer.OrdinalIgnoreCase)}",
+                $"families_contain_맑은_고딕={families.Contains("맑은 고딕", StringComparer.OrdinalIgnoreCase)}"),
+                new System.Text.UTF8Encoding(false));
+        }
+
         Assert.NotNull(ChartRenderer.Font);
-        using var chosen = SkiaSharp.SKTypeface.FromFamilyName(ChartRenderer.Font);
-        Assert.True(chosen.ContainsGlyph('가'), $"'{ChartRenderer.Font}' -> '{chosen.FamilyName}' has no Hangul");
+        var drawn = ScottPlot.Fonts.GetTypeface(ChartRenderer.Font, bold: false, italic: false);
+        Assert.True(drawn.ContainsGlyph('가'), $"ScottPlot draws '{ChartRenderer.Font}' with '{drawn.FamilyName}', which has no Hangul");
+    }
+
+    [Fact]
+    public void Font_choice_uses_the_localized_name_when_the_english_name_is_not_drawable()
+    {
+        // Korean Windows: "Malgun Gothic" is not in the installed-name list ScottPlot checks, "맑은 고딕" is.
+        // Simulated here with a name pair: only the reported (localized) name gives a Hangul typeface.
+        using var hangul = new[] { "Malgun Gothic", "NanumGothic", "Noto Sans CJK KR" }
+            .Select(n => SkiaSharp.SKTypeface.FromFamilyName(n)).FirstOrDefault(tf => tf.ContainsGlyph('가'));
+        if (hangul is null)
+        {
+            Assert.Skip("이 머신에는 시험용 한글 글꼴이 없습니다.");
+        }
+
+        using var plain = SkiaSharp.SKTypeface.FromFamilyName("DejaVu Sans");
+        var chosen = ChartRenderer.ResolveHangulFont(
+            ["Malgun Gothic"],
+            name => name == "Malgun Gothic" ? "맑은 고딕" : null,
+            ["Segoe UI"],
+            name => name == "맑은 고딕" ? hangul : plain);
+
+        Assert.Equal("맑은 고딕", chosen);
+        Assert.Null(ChartRenderer.ResolveHangulFont(["Malgun Gothic"], _ => null, ["Segoe UI"], _ => plain));
     }
 }
