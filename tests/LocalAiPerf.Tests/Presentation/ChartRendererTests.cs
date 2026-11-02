@@ -104,6 +104,13 @@ public class ChartRendererTests
             plot.SavePng(file, 900, 320);
             Assert.True(new FileInfo(file).Length > 2000, name);
         }
+
+        // 200 % display scale (as on a 4K monitor): the app sets ScaleFactor; everything must still render.
+        var scaled = new Plot { ScaleFactor = 2 };
+        Assert.True(ChartRenderer.Render(scaled, models["live-utilization"]));
+        var scaledFile = Path.Combine(output, "live-utilization-200pct.png");
+        scaled.SavePng(scaledFile, 1800, 640);
+        Assert.True(new FileInfo(scaledFile).Length > 2000);
     }
 
     [Fact]

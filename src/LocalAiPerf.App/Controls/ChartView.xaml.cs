@@ -2,6 +2,7 @@ using System.Globalization;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
+using System.Windows.Media;
 using LocalAiPerf.Presentation.Charts;
 using ScottPlot;
 
@@ -24,7 +25,32 @@ public partial class ChartView : UserControl
         InitializeComponent();
         ApplyInteractivity();
         ChartRenderer.ApplyStyle(Plot.Plot);
+        Loaded += (_, _) => ApplyDisplayScale(VisualTreeHelper.GetDpi(this));
         Plot.Refresh();
+    }
+
+    /// <summary>
+    /// ScottPlot's WPF control draws in physical pixels and does not apply the Windows display scale by itself, so at
+    /// 150-200 % scaling the chart text came out at 1/1.5-1/2 of the size of the rest of the window. ScaleFactor scales the
+    /// whole figure; ScottPlot divides pointer positions by the same factor, so hover and zoom stay aligned.
+    /// </summary>
+    private void ApplyDisplayScale(DpiScale dpi)
+    {
+        var scale = dpi.DpiScaleX > 0 ? dpi.DpiScaleX : 1.0;
+        if (Math.Abs(Plot.Plot.ScaleFactor - scale) < 0.001)
+        {
+            return;
+        }
+
+        Plot.Plot.ScaleFactor = scale;
+        Plot.DisplayScale = (float)scale;
+        Plot.Refresh();
+    }
+
+    protected override void OnDpiChanged(DpiScale oldDpi, DpiScale newDpi)
+    {
+        base.OnDpiChanged(oldDpi, newDpi);
+        ApplyDisplayScale(newDpi);
     }
 
     public ChartModel? Model
