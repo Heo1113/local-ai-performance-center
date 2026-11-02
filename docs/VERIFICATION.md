@@ -45,6 +45,10 @@
 | GUI 스모크 (게시된 EXE, 실제 센서) | 통과: 프레임 19, 6개 화면 이동, 수동 기록 2회, 기록 통계, 비교, 설정, 예외 0, 바인딩 오류·경고 0. GPU는 "nvml.dll을 찾을 수 없습니다"로 N/A 표시 |
 | GUI 스모크 (게시된 EXE, 가상 센서) | 통과: 같은 검사, GPU 그래프 경로 포함. 화면별 스크린샷은 아티팩트 `smoke-test-evidence` |
 
+그래프 한글 (CI #21, 커밋 `79e4e91`, 지역 형식 ko-KR): 설치 글꼴 목록에 `맑은 고딕`은 있고 `Malgun Gothic`은 없음을 확인했습니다
+(`families_contain_Malgun_Gothic=False`, `families_contain_맑은_고딕=True`). 이 때문에 영어 이름을 넘기던 이전 빌드는 한글 없는 기본 글꼴로 그렸고,
+현재 빌드는 `맑은 고딕`을 골라 실제로 Malgun Gothic으로 그립니다(`drawn_with=Malgun Gothic`). 사용자 PC 화면 확인은 아직입니다.
+
 처음 실행(#1)에서 Windows 전용 결함을 발견해 수정했습니다: Windows는 닫힌 포트 연결을 약 2초 재시도해서
 Strata 미실행이 "응답 시간 초과"로 잘못 분류되었습니다. TCP 연결 단계에 별도 제한 시간을 두어 "연결 오류"로 분류하도록 고쳤습니다.
 
