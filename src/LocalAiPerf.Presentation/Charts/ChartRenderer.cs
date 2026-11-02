@@ -59,6 +59,25 @@ public static class ChartRenderer
         return null;
     }
 
+    /// <summary>Legend rows for the host to draw: one per series with data (only when there are two or more) and one per span label.</summary>
+    public static IReadOnlyList<LegendEntry> LegendEntries(ChartModel? model)
+    {
+        if (model is null || model.IsEmpty)
+        {
+            return [];
+        }
+
+        var series = model.Series.Where(x => x.X.Length > 0).ToList();
+        if (series.Count < 2 && model.Spans.Count == 0)
+        {
+            return [];
+        }
+
+        var entries = series.Select(x => new LegendEntry(x.Label, x.ColorHex, false)).ToList();
+        entries.AddRange(model.Spans.DistinctBy(x => x.Label).Select(x => new LegendEntry(x.Label, x.ColorHex, true)));
+        return entries;
+    }
+
     /// <summary>Returns false when there is nothing to draw (the caller shows <see cref="ChartModel.EmptyText"/>).</summary>
     public static bool Render(Plot plot, ChartModel? model)
     {
@@ -113,7 +132,7 @@ public static class ChartRenderer
             // A limit is a threshold, so it is the one dashed line on the chart. Its label sits inside the plot, at the right end.
             plot.Add.HorizontalLine(reference.Y, 1, Color.FromHex(reference.ColorHex), LinePattern.Dashed);
             var label = plot.Add.Text(reference.Label, maxX, reference.Y);
-            label.LabelAlignment = Alignment.LowerRight;
+            label.LabelAlignment = Alignment.UpperRight; // below the line: never clipped at the top of the plot
             label.LabelFontColor = Color.FromHex(ChartPalette.SecondaryInk);
             label.LabelBackgroundColor = Color.FromHex(ChartPalette.Surface);
             label.LabelFontSize = 11;
@@ -161,27 +180,9 @@ public static class ChartRenderer
             plot.Axes.Remove(panel);
         }
 
-        if (showLegend)
-        {
-            var legendPanel = plot.ShowLegend(Edge.Top);
-            legendPanel.Padding = new PixelPadding(0);
-            plot.Legend.Margin = new PixelPadding(0);
-            plot.Legend.Padding = new PixelPadding(6, 6, 2, 2);
-            plot.Legend.Orientation = Orientation.Horizontal;
-            if (Font is not null)
-            {
-                plot.Legend.FontName = Font;
-            }
-            else
-            {
-                // No known Hangul font: let ScottPlot pick, per legend item, a font that can draw the text.
-                plot.Legend.SetBestFontOnEachRender = true;
-            }
-        }
-        else
-        {
-            plot.HideLegend();
-        }
+        // The legend is drawn by the host (WPF) above the chart, see LegendEntries: a ScottPlot legend panel did not grow
+        // with the display scale and its text was clipped at 200 %.
+        plot.HideLegend();
 
         ApplyStyle(plot); // axes created above (date axis) get the same ink
         if (Font is null)
@@ -227,3 +228,5 @@ public static class ChartRenderer
         }
     }
 }
+
+public sealed record LegendEntry(string Label, string ColorHex, bool IsBand);

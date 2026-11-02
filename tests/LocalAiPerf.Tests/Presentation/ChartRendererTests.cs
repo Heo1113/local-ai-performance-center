@@ -99,7 +99,8 @@ public class ChartRendererTests
             }
 
             Assert.Single(plot.Axes.GetAxes(Edge.Bottom));
-            Assert.True(plot.Axes.GetPanels().Count(p => p is ScottPlot.Panels.LegendPanel) <= 1, $"{name}: legend panels accumulate");
+            Assert.DoesNotContain(plot.Axes.GetPanels(), p => p is ScottPlot.Panels.LegendPanel); // legend is drawn by the host
+            Assert.Equal(model.Series.Count(x => x.X.Length > 0) >= 2 || model.Spans.Count > 0, ChartRenderer.LegendEntries(model).Count > 0);
             var file = Path.Combine(output, name + ".png");
             plot.SavePng(file, 900, 320);
             Assert.True(new FileInfo(file).Length > 2000, name);

@@ -84,6 +84,12 @@ public partial class ChartView : UserControl
         TitleText.Text = model?.Title ?? "";
         UnitText.Text = model is null ? "" : $"[{model.Unit}]";
         var drawn = ChartRenderer.Render(Plot.Plot, model);
+        LegendItems.ItemsSource = ChartRenderer.LegendEntries(model).Select(e => new
+        {
+            e.Label,
+            Brush = new SolidColorBrush((System.Windows.Media.Color)ColorConverter.ConvertFromString(e.ColorHex)) { Opacity = e.IsBand ? 0.5 : 1 },
+            Thickness = e.IsBand ? 8.0 : 2.0,
+        }).ToList();
         EmptyText.Text = model?.EmptyText ?? "";
         EmptyText.Visibility = drawn ? Visibility.Collapsed : Visibility.Visible;
         Plot.Refresh();
