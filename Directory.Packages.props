@@ -1,0 +1,11 @@
+<Project>
+  <ItemGroup>
+    <!-- Runtime dependencies (redistributed in the release package; see THIRD-PARTY-NOTICES.md) -->
+    <PackageVersion Include="CommunityToolkit.Mvvm" Version="8.4.2" />
+    <PackageVersion Include="Microsoft.Data.Sqlite" Version="10.0.14" />
+    <PackageVersion Include="ScottPlot" Version="5.1.59" />
+    <PackageVersion Include="ScottPlot.WPF" Version="5.1.59" />
+    <!-- Test-only dependencies (not redistributed) -->
+    <PackageVersion Include="xunit.v3" Version="4.0.2" />
+  </ItemGroup>
+</Project>

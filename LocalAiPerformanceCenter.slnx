@@ -1,0 +1,18 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/LocalAiPerf.Analytics/LocalAiPerf.Analytics.csproj" />
+    <Project Path="src/LocalAiPerf.App/LocalAiPerf.App.csproj" />
+    <Project Path="src/LocalAiPerf.Cli/LocalAiPerf.Cli.csproj" />
+    <Project Path="src/LocalAiPerf.Core/LocalAiPerf.Core.csproj" />
+    <Project Path="src/LocalAiPerf.Export/LocalAiPerf.Export.csproj" />
+    <Project Path="src/LocalAiPerf.Presentation/LocalAiPerf.Presentation.csproj" />
+    <Project Path="src/LocalAiPerf.Recording/LocalAiPerf.Recording.csproj" />
+    <Project Path="src/LocalAiPerf.Runtimes/LocalAiPerf.Runtimes.csproj" />
+    <Project Path="src/LocalAiPerf.Storage/LocalAiPerf.Storage.csproj" />
+    <Project Path="src/LocalAiPerf.Telemetry/LocalAiPerf.Telemetry.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/LocalAiPerf.MockStrata/LocalAiPerf.MockStrata.csproj" />
+    <Project Path="tests/LocalAiPerf.Tests/LocalAiPerf.Tests.csproj" />
+  </Folder>
+</Solution>
