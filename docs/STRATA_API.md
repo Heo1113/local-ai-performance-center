@@ -50,7 +50,7 @@
   데스크톱 앱은 엔진을 띄울 때 환경 변수를 복사해 넘깁니다(`control-runtime.mjs`의 `sourceServerEnvironment`/`controlEnvironment`,
   `strata_control/runtime.py`의 `os.environ.copy()`; `STRATA_API_KEY`만 제거).
 - **사용자 PC에서 확인함:** 사용자 환경 변수 `STRATA_TELEMETRY_KEY`를 설정하고 Strata 앱을 다시 시작한 뒤, 이 프로그램이 같은 키로
-  `127.0.0.1:18500`의 `/v1/telemetry`에 연결되었습니다(상태 "연결됨", 모델 ID·컨텍스트 표시). 엔진 버전·`/props`·`/v1/models`는 텔레메트리 키 권한 밖이라 "제공 안 됨"으로 표시합니다(`/v1/status`가 401이면 나머지는 묻지 않음).
+  `127.0.0.1:18500`의 `/v1/telemetry`에 연결되었습니다(상태 "연결됨", 모델 ID·컨텍스트 표시). 엔진 버전·`/props`·`/v1/models`는 텔레메트리 키 권한 밖이라 화면에서 숨깁니다(`/v1/status`가 401이면 나머지는 묻지 않음).
 - 포트는 로드마다 바뀔 수 있어, 포트 자동 찾기가 18500~18520에서 `/health`(인증 없음, `service: "strata"`)로 엔진을 찾습니다.
   여러 엔진이 있으면 로드된 엔진 중 텔레메트리 키를 받아 주는 엔진을 고릅니다. 탐색 중에는 키를 보내지 않습니다.
 - 내부 파일(`native-instances/*.json` 등)은 읽지 않습니다.

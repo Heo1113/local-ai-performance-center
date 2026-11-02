@@ -119,7 +119,7 @@ public sealed partial class DashboardViewModel(MonitoringService service) : Page
         var reachable = rt.IsReachable;
         RuntimeModel = rt.Model?.Id is string id ? id + (reachable ? "" : " (마지막 확인)") : Fmt.NA;
         RuntimeEngine = rt.Server?.EngineVersion
-            ?? (rt.Server?.MetadataRestricted == true ? "제공 안 됨 (읽기 전용 텔레메트리 키)" : reachable ? $"{Fmt.NA} - {rt.Server?.EngineVersionNote}" : Fmt.NA);
+            ?? (rt.Server?.MetadataRestricted == true ? "" : reachable ? $"{Fmt.NA} - {rt.Server?.EngineVersionNote}" : Fmt.NA);
         var last = reachable ? rt.LastCompletedRequest : null;
         if (reachable && rt.Rates?.AnswerTokPerSec is double live)
         {

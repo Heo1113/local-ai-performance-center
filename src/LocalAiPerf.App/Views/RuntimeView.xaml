@@ -6,6 +6,7 @@
   <UserControl.Resources>
     <local:StatusBrushConverter x:Key="StatusBrush" />
     <local:NotEmptyToVisibilityConverter x:Key="NotEmpty" />
+    <local:BoolToVisibilityConverter x:Key="CountVisible" />
     <DataTemplate x:Key="ValueRows">
       <DataGrid ItemsSource="{Binding}" AutoGenerateColumns="False" IsReadOnly="True" HeadersVisibility="Column" GridLinesVisibility="Horizontal" CanUserAddRows="False" CanUserDeleteRows="False" SelectionMode="Single" Background="Transparent" BorderThickness="0" Margin="0,4,0,0">
         <DataGrid.Columns>
@@ -82,16 +83,14 @@
         </Border>
       </UniformGrid>
 
-      <Grid>
-        <Grid.ColumnDefinitions><ColumnDefinition /><ColumnDefinition /></Grid.ColumnDefinitions>
-        <Border Style="{StaticResource Card}">
+      <UniformGrid Rows="1">
+        <Border Style="{StaticResource Card}" Visibility="{Binding Settings.Count, Converter={StaticResource CountVisible}}">
           <StackPanel>
             <TextBlock Text="모델 기본 생성 설정 (/props)" Style="{StaticResource SectionTitle}" />
             <ContentControl Content="{Binding Settings}" ContentTemplate="{StaticResource ValueRows}" />
-            <TextBlock Text="Strata가 API 키를 요구하고 읽기 전용 텔레메트리 키만 있으면 이 표는 비어 있을 수 있습니다." Style="{StaticResource Caption}" Margin="0,6,0,0" />
           </StackPanel>
         </Border>
-        <Border Grid.Column="1" Style="{StaticResource Card}">
+        <Border Style="{StaticResource Card}">
           <StackPanel>
             <TextBlock Text="슬롯별 컨텍스트" Style="{StaticResource SectionTitle}" />
             <DataGrid ItemsSource="{Binding Slots}" AutoGenerateColumns="False" IsReadOnly="True" HeadersVisibility="Column" GridLinesVisibility="Horizontal" CanUserAddRows="False" CanUserDeleteRows="False" SelectionMode="Single" Background="Transparent" BorderThickness="0" Margin="0,4,0,0">
@@ -105,7 +104,7 @@
             </DataGrid>
           </StackPanel>
         </Border>
-      </Grid>
+      </UniformGrid>
 
       <Border Style="{StaticResource Card}">
         <StackPanel>

@@ -75,8 +75,8 @@
               <Grid.RowDefinitions><RowDefinition /><RowDefinition /><RowDefinition /><RowDefinition /><RowDefinition /><RowDefinition /></Grid.RowDefinitions>
               <TextBlock Text="모델" Style="{StaticResource Label}" />
               <TextBlock Grid.Column="1" Text="{Binding RuntimeModel}" Style="{StaticResource Value}" />
-              <TextBlock Grid.Row="1" Text="엔진 버전" Style="{StaticResource Label}" />
-              <TextBlock Grid.Row="1" Grid.Column="1" Text="{Binding RuntimeEngine}" Style="{StaticResource Value}" />
+              <TextBlock Grid.Row="1" Text="엔진 버전" Style="{StaticResource Label}" Visibility="{Binding RuntimeEngine, Converter={StaticResource NotEmpty}}" />
+              <TextBlock Grid.Row="1" Grid.Column="1" Text="{Binding RuntimeEngine}" Style="{StaticResource Value}" Visibility="{Binding RuntimeEngine, Converter={StaticResource NotEmpty}}" />
               <TextBlock Grid.Row="2" Text="프롬프트 처리" Style="{StaticResource Label}" />
               <TextBlock Grid.Row="2" Grid.Column="1" Text="{Binding PrefillTokS}" Style="{StaticResource Value}" />
               <TextBlock Grid.Row="3" Text="전체 출력 (계산값)" Style="{StaticResource Label}" />

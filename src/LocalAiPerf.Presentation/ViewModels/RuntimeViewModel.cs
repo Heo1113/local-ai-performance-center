@@ -99,10 +99,11 @@ public sealed partial class RuntimeViewModel(MonitoringService service) : PageVi
         Server.Clear();
         Server.Add(new ValueRow("서비스", rt.Server?.Service ?? Fmt.NA, Reported));
         var restricted = rt.Server?.MetadataRestricted == true;
-        const string NotProvided = "제공 안 됨";
-        const string RestrictedNote = "읽기 전용 텔레메트리 키로는 Strata가 제공하지 않음 (/v1/status, /props, /v1/models는 추론 API 키 필요)";
-        Server.Add(new ValueRow("엔진 버전", rt.Server?.EngineVersion ?? (restricted ? NotProvided : Fmt.NA), Reported,
-            rt.Server?.EngineVersion is null ? restricted ? RestrictedNote : rt.Server?.EngineVersionNote ?? "" : ""));
+        // A read-only telemetry key cannot read /v1/status, /props or /v1/models: those rows are left out, not shown as N/A.
+        if (!restricted || rt.Server?.EngineVersion is not null)
+        {
+            Server.Add(new ValueRow("엔진 버전", rt.Server?.EngineVersion ?? Fmt.NA, Reported, rt.Server?.EngineVersionNote ?? ""));
+        }
         Server.Add(new ValueRow("텔레메트리 출처", rt.Server?.TelemetrySource switch
         {
             "server-v1" => "/v1/telemetry (schema v1)",
@@ -119,14 +120,18 @@ public sealed partial class RuntimeViewModel(MonitoringService service) : PageVi
         Model.Clear();
         Model.Add(new ValueRow("모델", rt.Model?.Id ?? Fmt.NA, Reported, rt.IsReachable || rt.Model?.Id is null ? "" : "마지막으로 확인된 값"));
         Model.Add(new ValueRow("로드 상태", Fmt.Bool(rt.Model?.Loaded), Reported));
-        Model.Add(new ValueRow("모델 파일", rt.Model?.ModelFileName ?? (restricted ? NotProvided : Fmt.NA), Reported,
-            rt.Model?.ModelFileName is null && restricted ? RestrictedNote : "파일 이름만 표시 (경로 제외)"));
+        if (!restricted || rt.Model?.ModelFileName is not null)
+        {
+            Model.Add(new ValueRow("모델 파일", rt.Model?.ModelFileName ?? Fmt.NA, Reported, "파일 이름만 표시 (경로 제외)"));
+        }
         Model.Add(new ValueRow("컨텍스트 한도", Fmt.Int(rt.Model?.ContextTokens, "tokens"), Reported));
         Model.Add(new ValueRow("병렬 슬롯", Fmt.Int(rt.Work?.SlotsEffective), Reported,
             rt.Work?.SlotsRequested is int requested ? $"요청값 {requested}" : ""));
         Model.Add(new ValueRow("비전 입력", Fmt.Bool(rt.Model?.Vision), Reported));
-        Model.Add(new ValueRow("별칭", rt.Model?.Aliases.Count > 0 ? string.Join(", ", rt.Model.Aliases) : restricted ? NotProvided : Fmt.NA, Reported,
-            rt.Model?.Aliases.Count > 0 || !restricted ? "" : RestrictedNote));
+        if (!restricted || rt.Model?.Aliases.Count > 0)
+        {
+            Model.Add(new ValueRow("별칭", rt.Model?.Aliases.Count > 0 ? string.Join(", ", rt.Model.Aliases) : Fmt.NA, Reported));
+        }
 
         Settings.Clear();
         foreach (var setting in rt.Settings)
@@ -134,10 +139,7 @@ public sealed partial class RuntimeViewModel(MonitoringService service) : PageVi
             Settings.Add(new ValueRow(setting.Key, setting.Value, Reported, "/props 기본 생성 설정"));
         }
 
-        if (Settings.Count == 0 && restricted)
-        {
-            Settings.Add(new ValueRow("기본 생성 설정", NotProvided, Reported, RestrictedNote));
-        }
+
 
         Live.Clear();
         var reachable = rt.IsReachable;
