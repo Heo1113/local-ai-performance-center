@@ -94,6 +94,7 @@
               <StackPanel Orientation="Horizontal">
                 <TextBlock Text="그래프 지표" Style="{StaticResource Label}" VerticalAlignment="Center" />
                 <ComboBox ItemsSource="{Binding ChartMetrics}" SelectedItem="{Binding SelectedMetric}" DisplayMemberPath="DisplayName" MinWidth="240" />
+                <TextBlock Text="Ctrl+마우스 휠: 확대 · 드래그: 이동 · 가운데 클릭: 전체 보기" Style="{StaticResource Caption}" VerticalAlignment="Center" Margin="12,0,0,0" />
               </StackPanel>
               <c:ChartView Model="{Binding Chart}" Interactive="True" Height="320" Margin="0,8,0,0" />
             </StackPanel>

@@ -28,6 +28,7 @@ public partial class App : Application
     protected override async void OnStartup(StartupEventArgs e)
     {
         base.OnStartup(e);
+        Services.WheelForwarding.Register();
         Options = StartupOptions.Parse(e.Args);
         AppPaths paths;
         try
